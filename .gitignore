@@ -1,0 +1,23 @@
+# Build artifacts
+/bin/
+coverage.out
+coverage.html
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go build cache
+*.test
+*.out
+
+# Local config files (keep examples)
+pgedge-loadgen.yaml
+!pgedge-loadgen.yaml.example

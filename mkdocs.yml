@@ -1,0 +1,70 @@
+site_name: pgEdge Load Generator
+
+extra_css:
+    - stylesheets/extra.css
+
+markdown_extensions:
+    - admonition
+    - pymdownx.details
+    - pymdownx.superfences
+    - tables
+    - toc:
+          permalink: true
+
+plugins:
+    - search
+
+theme:
+    name: material
+    custom_dir: docs/overrides
+    favicon: img/favicon.ico
+
+    logo_dark_mode: 'img/logo-dark.png'
+    logo_light_mode: 'img/logo-light.png'
+
+    features:
+        - navigation.instant
+        - navigation.tracking
+        - navigation.prune
+        - navigation.top
+        - navigation.sections
+        - toc.follow
+        - content.code.copy
+
+    palette:
+        - media: "(prefers-color-scheme: light)"
+          scheme: default
+          primary: white
+          accent: cyan
+          toggle:
+              icon: material/brightness-7
+              name: Switch to dark mode
+
+        - media: "(prefers-color-scheme: dark)"
+          scheme: slate
+          primary: black
+          accent: cyan
+          toggle:
+              icon: material/brightness-4
+              name: Switch to system preference
+
+extra:
+    generator: false
+
+copyright: Copyright &copy; 2025 pgEdge, Inc
+repo_url: https://github.com/pgEdge/pgedge-loadgen
+
+nav:
+    - Getting Started:
+          - Introduction: index.md
+          - Installation: installation.md
+
+    - User Guide:
+          - Applications: applications.md
+          - Usage Profiles: profiles.md
+          - Configuration: configuration.md
+
+    - Reference:
+          - CLI Reference: cli-reference.md
+
+    - Changelog: changelog.md
