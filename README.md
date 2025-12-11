@@ -68,14 +68,13 @@ make build
 
 ## Documentation
 
-Full documentation: [https://pgedge.github.io/pgedge-loadgen/](https://pgedge.github.io/pgedge-loadgen/)
-
-- [Installation](https://pgedge.github.io/pgedge-loadgen/installation/)
-- [Applications](https://pgedge.github.io/pgedge-loadgen/applications/)
-- [Usage Profiles](https://pgedge.github.io/pgedge-loadgen/profiles/)
-- [Configuration](https://pgedge.github.io/pgedge-loadgen/configuration/)
-- [CLI Reference](https://pgedge.github.io/pgedge-loadgen/cli-reference/)
+- [Installation](docs/installation.md)
+- [Applications](docs/applications.md)
+- [Usage Profiles](docs/profiles.md)
+- [Configuration](docs/configuration.md)
+- [CLI Reference](docs/cli-reference.md)
+- [Changelog](docs/changelog.md)
 
 ## License
 
-Copyright 2025 pgEdge, Inc. See [LICENSE](LICENSE) for details.
+Copyright 2025 pgEdge, Inc. See [LICENCE.md](LICENCE.md) for details.
