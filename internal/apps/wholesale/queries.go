@@ -12,15 +12,6 @@ import (
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
 )
 
-// Query weights based on TPC-C specification
-var queryWeights = map[string]int{
-	"new_order":    45,
-	"payment":      43,
-	"order_status": 4,
-	"delivery":     4,
-	"stock_level":  4,
-}
-
 // QueryExecutor executes wholesale queries.
 type QueryExecutor struct {
 	faker         *datagen.Faker

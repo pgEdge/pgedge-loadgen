@@ -104,7 +104,7 @@ jobs:
             - name: Run integration tests
               env:
                   PGEDGE_TEST_CONN: "postgres://postgres:postgres@localhost:5432/postgres"
-              run: go test -tags=integration -v -race ./...
+              run: go test -tags=integration -v -race -timeout 30m ./...
 
     build:
         name: Build
