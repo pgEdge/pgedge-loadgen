@@ -9,16 +9,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
+	"github.com/pgEdge/pgedge-loadgen/internal/db"
 	"github.com/pgEdge/pgedge-loadgen/internal/logging"
 	"github.com/pgEdge/pgedge-loadgen/internal/workload/profiles"
 )
 
 // ExecutorConfig holds configuration for the workload executor.
 type ExecutorConfig struct {
-	Pool               *pgxpool.Pool
+	ConnString         string // Connection string for creating per-worker connections
 	App                apps.App
 	Connections        int
 	Profile            string
@@ -33,7 +34,7 @@ type ExecutorConfig struct {
 
 // Executor manages the workload execution.
 type Executor struct {
-	pool           *pgxpool.Pool
+	connString     string
 	app            apps.App
 	connections    int
 	profile        profiles.Profile
@@ -81,7 +82,7 @@ func NewExecutor(cfg ExecutorConfig) (*Executor, error) {
 	}
 
 	return &Executor{
-		pool:               cfg.Pool,
+		connString:         cfg.ConnString,
 		app:                cfg.App,
 		connections:        cfg.Connections,
 		profile:            profile,
@@ -133,6 +134,15 @@ func (e *Executor) Run(ctx context.Context) error {
 func (e *Executor) poolWorker(ctx context.Context, id int) {
 	logging.Debug().Int("worker_id", id).Msg("Pool worker started")
 
+	// Create dedicated connection for this worker with unique application name
+	appNameSuffix := fmt.Sprintf("client %d", id+1)
+	conn, err := db.ConnectSingle(ctx, e.connString, appNameSuffix)
+	if err != nil {
+		logging.Error().Err(err).Int("worker_id", id).Msg("Failed to create worker connection")
+		return
+	}
+	defer conn.Close(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -148,8 +158,8 @@ func (e *Executor) poolWorker(ctx context.Context, id int) {
 				continue
 			}
 
-			// Execute query
-			result := e.app.ExecuteQuery(ctx, e.pool)
+			// Execute query using dedicated connection
+			result := e.app.ExecuteQueryConn(ctx, conn)
 
 			// Update metrics
 			e.totalQueries.Add(1)
@@ -191,6 +201,15 @@ func (e *Executor) poolWorker(ctx context.Context, id int) {
 func (e *Executor) sessionWorker(ctx context.Context, id int) {
 	logging.Debug().Int("worker_id", id).Msg("Session worker started")
 
+	// Create dedicated connection for this worker with unique application name
+	appNameSuffix := fmt.Sprintf("client %d", id+1)
+	conn, err := db.ConnectSingle(ctx, e.connString, appNameSuffix)
+	if err != nil {
+		logging.Error().Err(err).Int("worker_id", id).Msg("Failed to create worker connection")
+		return
+	}
+	defer conn.Close(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -207,13 +226,13 @@ func (e *Executor) sessionWorker(ctx context.Context, id int) {
 			}
 
 			// Run a user session
-			e.runSession(ctx, id, activityLevel)
+			e.runSession(ctx, id, conn, activityLevel)
 		}
 	}
 }
 
 // runSession simulates a single user session with multiple queries and think time.
-func (e *Executor) runSession(ctx context.Context, workerID int, activityLevel float64) {
+func (e *Executor) runSession(ctx context.Context, workerID int, conn *pgx.Conn, activityLevel float64) {
 	// Calculate session duration (randomized within range)
 	sessionDuration := e.randomDuration(e.sessionMinDuration, e.sessionMaxDuration)
 
@@ -240,8 +259,8 @@ func (e *Executor) runSession(ctx context.Context, workerID int, activityLevel f
 		case <-ctx.Done():
 			return
 		default:
-			// Execute query
-			result := e.app.ExecuteQuery(ctx, e.pool)
+			// Execute query using dedicated connection
+			result := e.app.ExecuteQueryConn(ctx, conn)
 
 			// Update metrics
 			e.totalQueries.Add(1)

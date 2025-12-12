@@ -114,26 +114,29 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Connect to database
+	// Connect to database for metadata check (single connection, not pool)
 	ctx := context.Background()
-	pool, err := db.Connect(ctx, cfg.Connection)
+	conn, err := db.ConnectSingle(ctx, cfg.Connection, "metadata")
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	defer pool.Close()
 
 	// Check that database was initialized for this app
-	existingApp, err := db.GetMetadataValue(ctx, pool, "app")
+	existingApp, err := db.GetMetadataValueConn(ctx, conn, "app")
 	if err != nil {
 		return fmt.Errorf(
 			"database has not been initialized; run 'pgedge-loadgen init' first")
 	}
 	if existingApp != cfg.App {
+		conn.Close(ctx)
 		return fmt.Errorf(
 			"database was initialized for '%s' but '%s' was specified; "+
 				"re-run with --app=%s or initialize a new database",
 			existingApp, cfg.App, existingApp)
 	}
+
+	// Close metadata connection - workers will create their own connections
+	conn.Close(ctx)
 
 	durationMsg := "indefinitely"
 	if cfg.Run.Duration > 0 {
@@ -170,7 +173,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	// Create and run the workload executor
 	executor, err := workload.NewExecutor(workload.ExecutorConfig{
-		Pool:               pool,
+		ConnString:         cfg.Connection,
 		App:                application,
 		Connections:        cfg.Run.Connections,
 		Profile:            cfg.Run.Profile,

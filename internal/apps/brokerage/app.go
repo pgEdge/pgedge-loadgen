@@ -3,6 +3,7 @@ package brokerage
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
@@ -126,6 +127,16 @@ func (a *App) ExecuteQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryRe
 	return a.executor.ExecuteRandomQuery(ctx, pool)
 }
 
+// ExecuteQueryConn executes a randomly selected query using a single connection.
+func (a *App) ExecuteQueryConn(ctx context.Context, conn *pgx.Conn) apps.QueryResult {
+	// Initialize executor if needed (lazy initialization to get counts)
+	if a.executor == nil {
+		numCustomers, numAccounts, numSecurities, numTrades, numBrokers := a.getTableCountsConn(ctx, conn)
+		a.executor = NewQueryExecutor(numCustomers, numAccounts, numSecurities, numTrades, numBrokers)
+	}
+	return a.executor.ExecuteRandomQuery(ctx, conn)
+}
+
 // RequiresPgvector returns true if the app needs pgvector extension.
 func (a *App) RequiresPgvector() bool {
 	return false
@@ -139,6 +150,19 @@ func (a *App) getTableCounts(ctx context.Context, pool *pgxpool.Pool) (int, int,
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM security").Scan(&numSecurities)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM trade").Scan(&numTrades)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM broker").Scan(&numBrokers)
+
+	return max(1, numCustomers), max(1, numAccounts), max(1, numSecurities),
+		max(1, numTrades), max(1, numBrokers)
+}
+
+func (a *App) getTableCountsConn(ctx context.Context, conn *pgx.Conn) (int, int, int, int, int) {
+	var numCustomers, numAccounts, numSecurities, numTrades, numBrokers int
+
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM customer").Scan(&numCustomers)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM customer_account").Scan(&numAccounts)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM security").Scan(&numSecurities)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM trade").Scan(&numTrades)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM broker").Scan(&numBrokers)
 
 	return max(1, numCustomers), max(1, numAccounts), max(1, numSecurities),
 		max(1, numTrades), max(1, numBrokers)

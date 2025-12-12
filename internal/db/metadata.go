@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/logging"
@@ -58,6 +59,18 @@ func SaveMetadata(ctx context.Context, pool *pgxpool.Pool, app string, targetSiz
 func GetMetadataValue(ctx context.Context, pool *pgxpool.Pool, key string) (string, error) {
 	var value string
 	err := pool.QueryRow(ctx, `
+        SELECT value FROM loadgen_metadata WHERE key = $1
+    `, key).Scan(&value)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+// GetMetadataValueConn retrieves a single metadata value by key using a single connection.
+func GetMetadataValueConn(ctx context.Context, conn *pgx.Conn, key string) (string, error) {
+	var value string
+	err := conn.QueryRow(ctx, `
         SELECT value FROM loadgen_metadata WHERE key = $1
     `, key).Scan(&value)
 	if err != nil {

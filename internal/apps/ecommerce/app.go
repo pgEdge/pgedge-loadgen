@@ -3,6 +3,7 @@ package ecommerce
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
@@ -140,6 +141,20 @@ func (a *App) ExecuteQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryRe
 	return a.executor.ExecuteRandomQuery(ctx, pool)
 }
 
+// ExecuteQueryConn executes a randomly selected query using a single connection.
+func (a *App) ExecuteQueryConn(ctx context.Context, conn *pgx.Conn) apps.QueryResult {
+	// Initialize executor if needed
+	if a.executor == nil {
+		// Ensure embedder is set
+		if a.embedder == nil {
+			a.embedder = embeddings.NewRandomEmbedder(a.dimensions)
+		}
+		numProducts, numCustomers, numCategories, numOrders := a.getTableCountsConn(ctx, conn)
+		a.executor = NewQueryExecutor(a.embedder, numProducts, numCustomers, numCategories, numOrders)
+	}
+	return a.executor.ExecuteRandomQuery(ctx, conn)
+}
+
 // RequiresPgvector returns true if the app needs pgvector extension.
 func (a *App) RequiresPgvector() bool {
 	return true
@@ -152,6 +167,17 @@ func (a *App) getTableCounts(ctx context.Context, pool *pgxpool.Pool) (int, int,
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM customer").Scan(&numCustomers)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM category").Scan(&numCategories)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM orders").Scan(&numOrders)
+
+	return max(1, numProducts), max(1, numCustomers), max(1, numCategories), max(1, numOrders)
+}
+
+func (a *App) getTableCountsConn(ctx context.Context, conn *pgx.Conn) (int, int, int, int) {
+	var numProducts, numCustomers, numCategories, numOrders int
+
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM product").Scan(&numProducts)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM customer").Scan(&numCustomers)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM category").Scan(&numCategories)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM orders").Scan(&numOrders)
 
 	return max(1, numProducts), max(1, numCustomers), max(1, numCategories), max(1, numOrders)
 }

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
 )
@@ -48,7 +46,7 @@ func NewQueryExecutor(numCustomers, numAccounts, numSecurities, numTrades, numBr
 }
 
 // ExecuteRandomQuery executes a random query based on the TPC-E weights.
-func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryResult {
+func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, db apps.DB) apps.QueryResult {
 	queryType := e.selectQueryType()
 
 	start := time.Now()
@@ -57,25 +55,25 @@ func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Po
 
 	switch queryType {
 	case "broker_volume":
-		rowsAffected, err = e.executeBrokerVolume(ctx, pool)
+		rowsAffected, err = e.executeBrokerVolume(ctx, db)
 	case "customer_position":
-		rowsAffected, err = e.executeCustomerPosition(ctx, pool)
+		rowsAffected, err = e.executeCustomerPosition(ctx, db)
 	case "market_feed":
-		rowsAffected, err = e.executeMarketFeed(ctx, pool)
+		rowsAffected, err = e.executeMarketFeed(ctx, db)
 	case "market_watch":
-		rowsAffected, err = e.executeMarketWatch(ctx, pool)
+		rowsAffected, err = e.executeMarketWatch(ctx, db)
 	case "security_detail":
-		rowsAffected, err = e.executeSecurityDetail(ctx, pool)
+		rowsAffected, err = e.executeSecurityDetail(ctx, db)
 	case "trade_lookup":
-		rowsAffected, err = e.executeTradeLookup(ctx, pool)
+		rowsAffected, err = e.executeTradeLookup(ctx, db)
 	case "trade_order":
-		rowsAffected, err = e.executeTradeOrder(ctx, pool)
+		rowsAffected, err = e.executeTradeOrder(ctx, db)
 	case "trade_result":
-		rowsAffected, err = e.executeTradeResult(ctx, pool)
+		rowsAffected, err = e.executeTradeResult(ctx, db)
 	case "trade_status":
-		rowsAffected, err = e.executeTradeStatus(ctx, pool)
+		rowsAffected, err = e.executeTradeStatus(ctx, db)
 	case "trade_update":
-		rowsAffected, err = e.executeTradeUpdate(ctx, pool)
+		rowsAffected, err = e.executeTradeUpdate(ctx, db)
 	}
 
 	return apps.QueryResult{
@@ -97,10 +95,10 @@ func (e *QueryExecutor) selectQueryType() string {
 }
 
 // Broker Volume - Calculate total trade volume per broker
-func (e *QueryExecutor) executeBrokerVolume(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeBrokerVolume(ctx context.Context, db apps.DB) (int64, error) {
 	sectorID := datagen.Choose(e.faker, []string{"EN", "MT", "IN", "CD", "CS", "HC", "FN", "IT", "TS", "UT", "RE"})
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT b.b_name, SUM(t.t_qty * t.t_trade_price) AS volume
         FROM broker b
         JOIN customer_account ca ON b.b_id = ca.ca_b_id
@@ -127,11 +125,11 @@ func (e *QueryExecutor) executeBrokerVolume(ctx context.Context, pool *pgxpool.P
 }
 
 // Customer Position - Get customer portfolio information
-func (e *QueryExecutor) executeCustomerPosition(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeCustomerPosition(ctx context.Context, db apps.DB) (int64, error) {
 	customerID := e.faker.Int(1, e.numCustomers)
 
 	// Get customer info and accounts
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT c.c_l_name, c.c_f_name, ca.ca_id, ca.ca_name, ca.ca_bal,
                COALESCE(SUM(hs.hs_qty * lt.lt_price), 0) AS assets
         FROM customer c
@@ -154,7 +152,7 @@ func (e *QueryExecutor) executeCustomerPosition(ctx context.Context, pool *pgxpo
 }
 
 // Market Feed - Update security prices (simulated market data)
-func (e *QueryExecutor) executeMarketFeed(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeMarketFeed(ctx context.Context, db apps.DB) (int64, error) {
 	// Update a few random securities' last trade info
 	numUpdates := e.faker.Int(1, 5)
 	var totalRows int64
@@ -165,7 +163,7 @@ func (e *QueryExecutor) executeMarketFeed(ctx context.Context, pool *pgxpool.Poo
 		newPrice := e.faker.Float64(5, 500)
 		volume := int64(e.faker.Int(1000, 100000))
 
-		result, err := pool.Exec(ctx, `
+		result, err := db.Exec(ctx, `
             UPDATE last_trade
             SET lt_price = $2, lt_vol = lt_vol + $3, lt_dts = NOW()
             WHERE lt_s_symb = $1
@@ -179,10 +177,10 @@ func (e *QueryExecutor) executeMarketFeed(ctx context.Context, pool *pgxpool.Poo
 }
 
 // Market Watch - Check prices of watched securities
-func (e *QueryExecutor) executeMarketWatch(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeMarketWatch(ctx context.Context, db apps.DB) (int64, error) {
 	customerID := e.faker.Int(1, e.numCustomers)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT s.s_symb, s.s_name, lt.lt_price, lt.lt_open_price,
                (lt.lt_price - lt.lt_open_price) AS change,
                CASE WHEN lt.lt_open_price > 0
@@ -209,7 +207,7 @@ func (e *QueryExecutor) executeMarketWatch(ctx context.Context, pool *pgxpool.Po
 }
 
 // Security Detail - Get detailed security information
-func (e *QueryExecutor) executeSecurityDetail(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSecurityDetail(ctx context.Context, db apps.DB) (int64, error) {
 	secIdx := e.faker.Int(1, e.numSecurities)
 	symbol := fmt.Sprintf("SYM%06d", secIdx)
 
@@ -217,7 +215,7 @@ func (e *QueryExecutor) executeSecurityDetail(ctx context.Context, pool *pgxpool
 	var pe, high52, low52, dividend, yield float64
 	var numOut int64
 
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT s.s_name, s.s_pe, s.s_52wk_high, s.s_52wk_low,
                s.s_dividend, s.s_yield, s.s_num_out,
                co.co_name, e.ex_name
@@ -231,7 +229,7 @@ func (e *QueryExecutor) executeSecurityDetail(ctx context.Context, pool *pgxpool
 	}
 
 	// Also get recent trades for this security
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT t.t_dts, t.t_trade_price, t.t_qty
         FROM trade t
         WHERE t.t_s_symb = $1 AND t.t_st_id = 'CMPT'
@@ -251,13 +249,13 @@ func (e *QueryExecutor) executeSecurityDetail(ctx context.Context, pool *pgxpool
 }
 
 // Trade Lookup - Find trades by various criteria
-func (e *QueryExecutor) executeTradeLookup(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeTradeLookup(ctx context.Context, db apps.DB) (int64, error) {
 	accountID := e.faker.Int(1, e.numAccounts)
 	startDate := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC).Add(
 		time.Duration(e.faker.Int(0, 365*3)) * 24 * time.Hour)
 	endDate := startDate.Add(30 * 24 * time.Hour)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT t.t_id, t.t_dts, t.t_s_symb, t.t_qty, t.t_trade_price,
                t.t_chrg, t.t_comm, tt.tt_name, st.st_name
         FROM trade t
@@ -282,7 +280,7 @@ func (e *QueryExecutor) executeTradeLookup(ctx context.Context, pool *pgxpool.Po
 }
 
 // Trade Order - Place a new trade order
-func (e *QueryExecutor) executeTradeOrder(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeTradeOrder(ctx context.Context, db apps.DB) (int64, error) {
 	accountID := e.faker.Int(1, e.numAccounts)
 	secIdx := e.faker.Int(1, e.numSecurities)
 	symbol := fmt.Sprintf("SYM%06d", secIdx)
@@ -292,7 +290,7 @@ func (e *QueryExecutor) executeTradeOrder(ctx context.Context, pool *pgxpool.Poo
 
 	// Get current price
 	var currentPrice float64
-	err := pool.QueryRow(ctx, `SELECT lt_price FROM last_trade WHERE lt_s_symb = $1`, symbol).Scan(&currentPrice)
+	err := db.QueryRow(ctx, `SELECT lt_price FROM last_trade WHERE lt_s_symb = $1`, symbol).Scan(&currentPrice)
 	if err != nil {
 		return 0, err
 	}
@@ -301,7 +299,7 @@ func (e *QueryExecutor) executeTradeOrder(ctx context.Context, pool *pgxpool.Poo
 	var newTradeID int64
 	maxRetries := 5
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		err = pool.QueryRow(ctx, `
+		err = db.QueryRow(ctx, `
             INSERT INTO trade (t_id, t_dts, t_st_id, t_tt_id, t_is_cash, t_s_symb,
                               t_qty, t_bid_price, t_ca_id, t_exec_name, t_trade_price,
                               t_chrg, t_comm, t_tax, t_lifo)
@@ -319,7 +317,7 @@ func (e *QueryExecutor) executeTradeOrder(ctx context.Context, pool *pgxpool.Poo
 	}
 
 	// Insert trade history
-	_, err = pool.Exec(ctx, `
+	_, err = db.Exec(ctx, `
         INSERT INTO trade_history (th_t_id, th_dts, th_st_id)
         VALUES ($1, NOW(), 'SBMT')
         ON CONFLICT (th_t_id, th_st_id) DO NOTHING
@@ -332,9 +330,9 @@ func (e *QueryExecutor) executeTradeOrder(ctx context.Context, pool *pgxpool.Poo
 }
 
 // Trade Result - Process completed trade
-func (e *QueryExecutor) executeTradeResult(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeTradeResult(ctx context.Context, db apps.DB) (int64, error) {
 	// Use transaction with FOR UPDATE SKIP LOCKED to prevent race conditions
-	tx, err := pool.Begin(ctx)
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -405,10 +403,10 @@ func (e *QueryExecutor) executeTradeResult(ctx context.Context, pool *pgxpool.Po
 }
 
 // Trade Status - Check status of recent trades
-func (e *QueryExecutor) executeTradeStatus(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeTradeStatus(ctx context.Context, db apps.DB) (int64, error) {
 	accountID := e.faker.Int(1, e.numAccounts)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT t.t_id, t.t_dts, t.t_s_symb, t.t_qty, t.t_bid_price,
                t.t_trade_price, st.st_name, tt.tt_name
         FROM trade t
@@ -431,12 +429,12 @@ func (e *QueryExecutor) executeTradeStatus(ctx context.Context, pool *pgxpool.Po
 }
 
 // Trade Update - Modify an existing pending trade
-func (e *QueryExecutor) executeTradeUpdate(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeTradeUpdate(ctx context.Context, db apps.DB) (int64, error) {
 	accountID := e.faker.Int(1, e.numAccounts)
 
 	// Find a pending trade to update
 	var tradeID int64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT t_id FROM trade
         WHERE t_ca_id = $1 AND t_st_id = 'PNDG'
         ORDER BY t_dts DESC
@@ -453,7 +451,7 @@ func (e *QueryExecutor) executeTradeUpdate(ctx context.Context, pool *pgxpool.Po
 		newExecName = newExecName[:64]
 	}
 
-	result, err := pool.Exec(ctx, `
+	result, err := db.Exec(ctx, `
         UPDATE trade SET t_exec_name = $2
         WHERE t_id = $1 AND t_st_id = 'PNDG'
     `, tradeID, newExecName)

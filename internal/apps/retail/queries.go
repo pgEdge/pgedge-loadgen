@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
 )
@@ -44,7 +42,7 @@ func NewQueryExecutor(numItems, numCustomers, numStores int) *QueryExecutor {
 }
 
 // ExecuteRandomQuery executes a random analytical query based on weights.
-func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryResult {
+func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, db apps.DB) apps.QueryResult {
 	queryType := e.selectQueryType()
 
 	start := time.Now()
@@ -53,27 +51,27 @@ func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Po
 
 	switch queryType {
 	case "store_sales_by_date":
-		rowsAffected, err = e.executeStoreSalesByDate(ctx, pool)
+		rowsAffected, err = e.executeStoreSalesByDate(ctx, db)
 	case "store_sales_by_item":
-		rowsAffected, err = e.executeStoreSalesByItem(ctx, pool)
+		rowsAffected, err = e.executeStoreSalesByItem(ctx, db)
 	case "store_sales_by_customer":
-		rowsAffected, err = e.executeStoreSalesByCustomer(ctx, pool)
+		rowsAffected, err = e.executeStoreSalesByCustomer(ctx, db)
 	case "web_sales_analysis":
-		rowsAffected, err = e.executeWebSalesAnalysis(ctx, pool)
+		rowsAffected, err = e.executeWebSalesAnalysis(ctx, db)
 	case "catalog_sales_analysis":
-		rowsAffected, err = e.executeCatalogSalesAnalysis(ctx, pool)
+		rowsAffected, err = e.executeCatalogSalesAnalysis(ctx, db)
 	case "cross_channel_sales":
-		rowsAffected, err = e.executeCrossChannelSales(ctx, pool)
+		rowsAffected, err = e.executeCrossChannelSales(ctx, db)
 	case "customer_demographics":
-		rowsAffected, err = e.executeCustomerDemographics(ctx, pool)
+		rowsAffected, err = e.executeCustomerDemographics(ctx, db)
 	case "promotion_effect":
-		rowsAffected, err = e.executePromotionEffect(ctx, pool)
+		rowsAffected, err = e.executePromotionEffect(ctx, db)
 	case "inventory_analysis":
-		rowsAffected, err = e.executeInventoryAnalysis(ctx, pool)
+		rowsAffected, err = e.executeInventoryAnalysis(ctx, db)
 	case "store_comparison":
-		rowsAffected, err = e.executeStoreComparison(ctx, pool)
+		rowsAffected, err = e.executeStoreComparison(ctx, db)
 	case "time_series_sales":
-		rowsAffected, err = e.executeTimeSeriesSales(ctx, pool)
+		rowsAffected, err = e.executeTimeSeriesSales(ctx, db)
 	}
 
 	return apps.QueryResult{
@@ -95,10 +93,10 @@ func (e *QueryExecutor) selectQueryType() string {
 }
 
 // Store Sales by Date - Aggregate store sales by date dimension
-func (e *QueryExecutor) executeStoreSalesByDate(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeStoreSalesByDate(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1998, 2002)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT d.d_year, d.d_moy, d.d_day_name,
                SUM(ss.ss_net_paid) AS total_sales,
                SUM(ss.ss_quantity) AS total_quantity,
@@ -122,10 +120,10 @@ func (e *QueryExecutor) executeStoreSalesByDate(ctx context.Context, pool *pgxpo
 }
 
 // Store Sales by Item - Top selling items
-func (e *QueryExecutor) executeStoreSalesByItem(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeStoreSalesByItem(ctx context.Context, db apps.DB) (int64, error) {
 	categoryID := e.faker.Int(1, len(categories))
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT i.i_item_id, i.i_product_name, i.i_category, i.i_brand,
                SUM(ss.ss_net_paid) AS total_revenue,
                SUM(ss.ss_quantity) AS units_sold,
@@ -150,10 +148,10 @@ func (e *QueryExecutor) executeStoreSalesByItem(ctx context.Context, pool *pgxpo
 }
 
 // Store Sales by Customer - Customer purchase patterns
-func (e *QueryExecutor) executeStoreSalesByCustomer(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeStoreSalesByCustomer(ctx context.Context, db apps.DB) (int64, error) {
 	state := datagen.Choose(e.faker, usStates)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT c.c_customer_id, c.c_first_name, c.c_last_name,
                ca.ca_state, ca.ca_city,
                SUM(ss.ss_net_paid) AS total_spent,
@@ -180,10 +178,10 @@ func (e *QueryExecutor) executeStoreSalesByCustomer(ctx context.Context, pool *p
 }
 
 // Web Sales Analysis - Web channel performance
-func (e *QueryExecutor) executeWebSalesAnalysis(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeWebSalesAnalysis(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1998, 2002)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT d.d_year, d.d_quarter_name,
                SUM(ws.ws_net_paid) AS total_revenue,
                SUM(ws.ws_ext_ship_cost) AS shipping_cost,
@@ -208,10 +206,10 @@ func (e *QueryExecutor) executeWebSalesAnalysis(ctx context.Context, pool *pgxpo
 }
 
 // Catalog Sales Analysis - Catalog channel performance
-func (e *QueryExecutor) executeCatalogSalesAnalysis(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeCatalogSalesAnalysis(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1998, 2002)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT d.d_year, d.d_moy,
                SUM(cs.cs_net_paid) AS total_revenue,
                SUM(cs.cs_ext_ship_cost) AS shipping_cost,
@@ -236,10 +234,10 @@ func (e *QueryExecutor) executeCatalogSalesAnalysis(ctx context.Context, pool *p
 }
 
 // Cross Channel Sales - Compare sales across channels
-func (e *QueryExecutor) executeCrossChannelSales(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeCrossChannelSales(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1998, 2002)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT d.d_year, d.d_quarter_name,
                COALESCE(ss.store_revenue, 0) AS store_revenue,
                COALESCE(ws.web_revenue, 0) AS web_revenue,
@@ -275,8 +273,8 @@ func (e *QueryExecutor) executeCrossChannelSales(ctx context.Context, pool *pgxp
 }
 
 // Customer Demographics Analysis
-func (e *QueryExecutor) executeCustomerDemographics(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	rows, err := pool.Query(ctx, `
+func (e *QueryExecutor) executeCustomerDemographics(ctx context.Context, db apps.DB) (int64, error) {
+	rows, err := db.Query(ctx, `
         SELECT cd.cd_gender, cd.cd_marital_status, cd.cd_education_status,
                COUNT(DISTINCT c.c_customer_sk) AS customer_count,
                SUM(ss.ss_net_paid) AS total_spent,
@@ -301,8 +299,8 @@ func (e *QueryExecutor) executeCustomerDemographics(ctx context.Context, pool *p
 }
 
 // Promotion Effect Analysis
-func (e *QueryExecutor) executePromotionEffect(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	rows, err := pool.Query(ctx, `
+func (e *QueryExecutor) executePromotionEffect(ctx context.Context, db apps.DB) (int64, error) {
+	rows, err := db.Query(ctx, `
         SELECT p.p_promo_name, p.p_channel_dmail, p.p_channel_email, p.p_channel_tv,
                SUM(ss.ss_net_paid) AS total_revenue,
                SUM(ss.ss_coupon_amt) AS total_coupons,
@@ -328,10 +326,10 @@ func (e *QueryExecutor) executePromotionEffect(ctx context.Context, pool *pgxpoo
 }
 
 // Inventory Analysis
-func (e *QueryExecutor) executeInventoryAnalysis(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeInventoryAnalysis(ctx context.Context, db apps.DB) (int64, error) {
 	warehouseSK := e.faker.Int(1, 5)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT w.w_warehouse_name, i.i_category, i.i_brand,
                SUM(inv.inv_quantity_on_hand) AS total_inventory,
                AVG(inv.inv_quantity_on_hand) AS avg_inventory
@@ -356,8 +354,8 @@ func (e *QueryExecutor) executeInventoryAnalysis(ctx context.Context, pool *pgxp
 }
 
 // Store Comparison
-func (e *QueryExecutor) executeStoreComparison(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	rows, err := pool.Query(ctx, `
+func (e *QueryExecutor) executeStoreComparison(ctx context.Context, db apps.DB) (int64, error) {
+	rows, err := db.Query(ctx, `
         SELECT s.s_store_name, s.s_city, s.s_state,
                SUM(ss.ss_net_paid) AS total_revenue,
                SUM(ss.ss_net_profit) AS total_profit,
@@ -381,8 +379,8 @@ func (e *QueryExecutor) executeStoreComparison(ctx context.Context, pool *pgxpoo
 }
 
 // Time Series Sales Analysis
-func (e *QueryExecutor) executeTimeSeriesSales(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	rows, err := pool.Query(ctx, `
+func (e *QueryExecutor) executeTimeSeriesSales(ctx context.Context, db apps.DB) (int64, error) {
+	rows, err := db.Query(ctx, `
         SELECT d.d_year, d.d_moy, t.t_hour,
                SUM(ss.ss_net_paid) AS hourly_sales,
                COUNT(*) AS transaction_count

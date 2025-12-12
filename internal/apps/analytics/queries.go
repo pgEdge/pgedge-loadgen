@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
 )
@@ -56,7 +54,7 @@ func NewQueryExecutor(numSuppliers, numParts, numCustomers, numOrders int) *Quer
 }
 
 // ExecuteRandomQuery executes a random analytical query based on weights.
-func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryResult {
+func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, db apps.DB) apps.QueryResult {
 	queryType := e.selectQueryType()
 
 	start := time.Now()
@@ -65,43 +63,43 @@ func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Po
 
 	switch queryType {
 	case "pricing_summary":
-		rowsAffected, err = e.executePricingSummary(ctx, pool)
+		rowsAffected, err = e.executePricingSummary(ctx, db)
 	case "min_cost_supplier":
-		rowsAffected, err = e.executeMinCostSupplier(ctx, pool)
+		rowsAffected, err = e.executeMinCostSupplier(ctx, db)
 	case "shipping_priority":
-		rowsAffected, err = e.executeShippingPriority(ctx, pool)
+		rowsAffected, err = e.executeShippingPriority(ctx, db)
 	case "order_priority":
-		rowsAffected, err = e.executeOrderPriority(ctx, pool)
+		rowsAffected, err = e.executeOrderPriority(ctx, db)
 	case "local_supplier_volume":
-		rowsAffected, err = e.executeLocalSupplierVolume(ctx, pool)
+		rowsAffected, err = e.executeLocalSupplierVolume(ctx, db)
 	case "revenue_forecast":
-		rowsAffected, err = e.executeRevenueForecast(ctx, pool)
+		rowsAffected, err = e.executeRevenueForecast(ctx, db)
 	case "volume_shipping":
-		rowsAffected, err = e.executeVolumeShipping(ctx, pool)
+		rowsAffected, err = e.executeVolumeShipping(ctx, db)
 	case "market_share":
-		rowsAffected, err = e.executeMarketShare(ctx, pool)
+		rowsAffected, err = e.executeMarketShare(ctx, db)
 	case "product_profit":
-		rowsAffected, err = e.executeProductProfit(ctx, pool)
+		rowsAffected, err = e.executeProductProfit(ctx, db)
 	case "returned_items":
-		rowsAffected, err = e.executeReturnedItems(ctx, pool)
+		rowsAffected, err = e.executeReturnedItems(ctx, db)
 	case "important_stock":
-		rowsAffected, err = e.executeImportantStock(ctx, pool)
+		rowsAffected, err = e.executeImportantStock(ctx, db)
 	case "shipping_modes":
-		rowsAffected, err = e.executeShippingModes(ctx, pool)
+		rowsAffected, err = e.executeShippingModes(ctx, db)
 	case "customer_distribution":
-		rowsAffected, err = e.executeCustomerDistribution(ctx, pool)
+		rowsAffected, err = e.executeCustomerDistribution(ctx, db)
 	case "promotion_effect":
-		rowsAffected, err = e.executePromotionEffect(ctx, pool)
+		rowsAffected, err = e.executePromotionEffect(ctx, db)
 	case "top_supplier":
-		rowsAffected, err = e.executeTopSupplier(ctx, pool)
+		rowsAffected, err = e.executeTopSupplier(ctx, db)
 	case "parts_supplier":
-		rowsAffected, err = e.executePartsSupplier(ctx, pool)
+		rowsAffected, err = e.executePartsSupplier(ctx, db)
 	case "small_quantity":
-		rowsAffected, err = e.executeSmallQuantity(ctx, pool)
+		rowsAffected, err = e.executeSmallQuantity(ctx, db)
 	case "large_volume":
-		rowsAffected, err = e.executeLargeVolume(ctx, pool)
+		rowsAffected, err = e.executeLargeVolume(ctx, db)
 	case "discounted_revenue":
-		rowsAffected, err = e.executeDiscountedRevenue(ctx, pool)
+		rowsAffected, err = e.executeDiscountedRevenue(ctx, db)
 	}
 
 	return apps.QueryResult{
@@ -123,11 +121,11 @@ func (e *QueryExecutor) selectQueryType() string {
 }
 
 // Q1: Pricing Summary Report - aggregates lineitem data
-func (e *QueryExecutor) executePricingSummary(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executePricingSummary(ctx context.Context, db apps.DB) (int64, error) {
 	// Random date range within valid period
 	deltaDays := e.faker.Int(60, 120)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT
             l_returnflag,
             l_linestatus,
@@ -164,12 +162,12 @@ func (e *QueryExecutor) executePricingSummary(ctx context.Context, pool *pgxpool
 }
 
 // Q2: Minimum Cost Supplier Query
-func (e *QueryExecutor) executeMinCostSupplier(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeMinCostSupplier(ctx context.Context, db apps.DB) (int64, error) {
 	size := e.faker.Int(1, 50)
 	ptype := datagen.Choose(e.faker, typeMats)
 	regionKey := e.faker.Int(0, 4)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment
         FROM part, supplier, partsupp, nation, region
         WHERE p_partkey = ps_partkey
@@ -204,10 +202,10 @@ func (e *QueryExecutor) executeMinCostSupplier(ctx context.Context, pool *pgxpoo
 }
 
 // Q3: Shipping Priority Query
-func (e *QueryExecutor) executeShippingPriority(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeShippingPriority(ctx context.Context, db apps.DB) (int64, error) {
 	segment := datagen.Choose(e.faker, segments)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT l_orderkey, SUM(l_extendedprice * (1 - l_discount)) AS revenue,
                o_orderdate, o_shippriority
         FROM customer, orders, lineitem
@@ -233,12 +231,12 @@ func (e *QueryExecutor) executeShippingPriority(ctx context.Context, pool *pgxpo
 }
 
 // Q4: Order Priority Checking Query
-func (e *QueryExecutor) executeOrderPriority(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeOrderPriority(ctx context.Context, db apps.DB) (int64, error) {
 	// Pick a random quarter in the data range
 	year := e.faker.Int(1993, 1997)
 	month := (e.faker.Int(0, 3) * 3) + 1
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT o_orderpriority, COUNT(*) AS order_count
         FROM orders
         WHERE o_orderdate >= DATE '1993-01-01' + INTERVAL '1 year' * $1 + INTERVAL '1 month' * $2
@@ -263,11 +261,11 @@ func (e *QueryExecutor) executeOrderPriority(ctx context.Context, pool *pgxpool.
 }
 
 // Q5: Local Supplier Volume Query
-func (e *QueryExecutor) executeLocalSupplierVolume(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeLocalSupplierVolume(ctx context.Context, db apps.DB) (int64, error) {
 	regionKey := e.faker.Int(0, 4)
 	year := e.faker.Int(1993, 1997)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT n_name, SUM(l_extendedprice * (1 - l_discount)) AS revenue
         FROM customer, orders, lineitem, supplier, nation, region
         WHERE c_custkey = o_custkey
@@ -295,13 +293,13 @@ func (e *QueryExecutor) executeLocalSupplierVolume(ctx context.Context, pool *pg
 }
 
 // Q6: Forecasting Revenue Change Query
-func (e *QueryExecutor) executeRevenueForecast(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeRevenueForecast(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1993, 1997)
 	discount := float64(e.faker.Int(2, 9)) / 100.0
 	quantity := e.faker.Int(24, 25)
 
 	var revenue float64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT COALESCE(SUM(l_extendedprice * l_discount), 0) AS revenue
         FROM lineitem
         WHERE l_shipdate >= DATE '1993-01-01' + INTERVAL '1 year' * $1
@@ -316,11 +314,11 @@ func (e *QueryExecutor) executeRevenueForecast(ctx context.Context, pool *pgxpoo
 }
 
 // Q7: Volume Shipping Query
-func (e *QueryExecutor) executeVolumeShipping(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeVolumeShipping(ctx context.Context, db apps.DB) (int64, error) {
 	nation1 := e.faker.Int(0, 24)
 	nation2 := (nation1 + e.faker.Int(1, 24)) % 25
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT supp_nation, cust_nation, l_year, SUM(volume) AS revenue
         FROM (
             SELECT n1.n_name AS supp_nation, n2.n_name AS cust_nation,
@@ -352,11 +350,11 @@ func (e *QueryExecutor) executeVolumeShipping(ctx context.Context, pool *pgxpool
 }
 
 // Q8: National Market Share Query
-func (e *QueryExecutor) executeMarketShare(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeMarketShare(ctx context.Context, db apps.DB) (int64, error) {
 	nationKey := e.faker.Int(0, 24)
 	ptype := datagen.Choose(e.faker, types)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT o_year, COALESCE(SUM(CASE WHEN s_nationkey = $1 THEN volume ELSE 0 END) / NULLIF(SUM(volume), 0), 0) AS mkt_share
         FROM (
             SELECT EXTRACT(YEAR FROM o_orderdate) AS o_year,
@@ -388,10 +386,10 @@ func (e *QueryExecutor) executeMarketShare(ctx context.Context, pool *pgxpool.Po
 }
 
 // Q9: Product Type Profit Measure Query
-func (e *QueryExecutor) executeProductProfit(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeProductProfit(ctx context.Context, db apps.DB) (int64, error) {
 	color := datagen.Choose(e.faker, []string{"green", "blue", "red", "yellow", "white"})
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT nation, o_year, SUM(amount) AS sum_profit
         FROM (
             SELECT n_name AS nation, EXTRACT(YEAR FROM o_orderdate) AS o_year,
@@ -421,11 +419,11 @@ func (e *QueryExecutor) executeProductProfit(ctx context.Context, pool *pgxpool.
 }
 
 // Q10: Returned Item Reporting Query
-func (e *QueryExecutor) executeReturnedItems(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeReturnedItems(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1993, 1995)
 	quarter := e.faker.Int(0, 3)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT c_custkey, c_name, SUM(l_extendedprice * (1 - l_discount)) AS revenue,
                c_acctbal, n_name, c_address, c_phone, c_comment
         FROM customer, orders, lineitem, nation
@@ -452,11 +450,11 @@ func (e *QueryExecutor) executeReturnedItems(ctx context.Context, pool *pgxpool.
 }
 
 // Q11: Important Stock Identification Query
-func (e *QueryExecutor) executeImportantStock(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeImportantStock(ctx context.Context, db apps.DB) (int64, error) {
 	nationKey := e.faker.Int(0, 24)
 	fraction := 0.0001
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT ps_partkey, SUM(ps_supplycost * ps_availqty) AS value
         FROM partsupp, supplier, nation
         WHERE ps_suppkey = s_suppkey
@@ -485,12 +483,12 @@ func (e *QueryExecutor) executeImportantStock(ctx context.Context, pool *pgxpool
 }
 
 // Q12: Shipping Modes and Order Priority Query
-func (e *QueryExecutor) executeShippingModes(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeShippingModes(ctx context.Context, db apps.DB) (int64, error) {
 	shipmode1 := datagen.Choose(e.faker, shipModes)
 	shipmode2 := datagen.Choose(e.faker, shipModes)
 	year := e.faker.Int(1993, 1997)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT l_shipmode,
                SUM(CASE WHEN o_orderpriority = '1-URGENT' OR o_orderpriority = '2-HIGH'
                         THEN 1 ELSE 0 END) AS high_line_count,
@@ -519,11 +517,11 @@ func (e *QueryExecutor) executeShippingModes(ctx context.Context, pool *pgxpool.
 }
 
 // Q13: Customer Distribution Query
-func (e *QueryExecutor) executeCustomerDistribution(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeCustomerDistribution(ctx context.Context, db apps.DB) (int64, error) {
 	word1 := datagen.Choose(e.faker, []string{"special", "pending", "unusual", "express"})
 	word2 := datagen.Choose(e.faker, []string{"requests", "packages", "accounts", "deposits"})
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT c_count, COUNT(*) AS custdist
         FROM (
             SELECT c_custkey, COUNT(o_orderkey) AS c_count
@@ -547,12 +545,12 @@ func (e *QueryExecutor) executeCustomerDistribution(ctx context.Context, pool *p
 }
 
 // Q14: Promotion Effect Query
-func (e *QueryExecutor) executePromotionEffect(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executePromotionEffect(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1993, 1997)
 	month := e.faker.Int(1, 12)
 
 	var promoRevenue float64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT COALESCE(100.00 * SUM(CASE WHEN p_type LIKE 'PROMO%'
                                  THEN l_extendedprice * (1 - l_discount)
                                  ELSE 0 END) / NULLIF(SUM(l_extendedprice * (1 - l_discount)), 0), 0) AS promo_revenue
@@ -568,11 +566,11 @@ func (e *QueryExecutor) executePromotionEffect(ctx context.Context, pool *pgxpoo
 }
 
 // Q15: Top Supplier Query
-func (e *QueryExecutor) executeTopSupplier(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeTopSupplier(ctx context.Context, db apps.DB) (int64, error) {
 	year := e.faker.Int(1993, 1997)
 	quarter := e.faker.Int(0, 3)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         WITH revenue AS (
             SELECT l_suppkey AS supplier_no,
                    SUM(l_extendedprice * (1 - l_discount)) AS total_revenue
@@ -600,11 +598,11 @@ func (e *QueryExecutor) executeTopSupplier(ctx context.Context, pool *pgxpool.Po
 }
 
 // Q16: Parts/Supplier Relationship Query
-func (e *QueryExecutor) executePartsSupplier(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executePartsSupplier(ctx context.Context, db apps.DB) (int64, error) {
 	brand := fmt.Sprintf("Brand#%d", e.faker.Int(1, 5)*10+e.faker.Int(1, 5))
 	ptype := datagen.Choose(e.faker, types)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT p_brand, p_type, p_size, COUNT(DISTINCT ps_suppkey) AS supplier_cnt
         FROM partsupp, part
         WHERE p_partkey = ps_partkey
@@ -631,12 +629,12 @@ func (e *QueryExecutor) executePartsSupplier(ctx context.Context, pool *pgxpool.
 }
 
 // Q17: Small-Quantity-Order Revenue Query
-func (e *QueryExecutor) executeSmallQuantity(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSmallQuantity(ctx context.Context, db apps.DB) (int64, error) {
 	brand := fmt.Sprintf("Brand#%d", e.faker.Int(1, 5)*10+e.faker.Int(1, 5))
 	container := datagen.Choose(e.faker, containers)
 
 	var avgYearly float64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT COALESCE(SUM(l_extendedprice) / 7.0, 0) AS avg_yearly
         FROM lineitem, part
         WHERE p_partkey = l_partkey
@@ -655,10 +653,10 @@ func (e *QueryExecutor) executeSmallQuantity(ctx context.Context, pool *pgxpool.
 }
 
 // Q18: Large Volume Customer Query
-func (e *QueryExecutor) executeLargeVolume(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeLargeVolume(ctx context.Context, db apps.DB) (int64, error) {
 	quantity := e.faker.Int(312, 315)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, SUM(l_quantity)
         FROM customer, orders, lineitem
         WHERE o_orderkey IN (
@@ -685,13 +683,13 @@ func (e *QueryExecutor) executeLargeVolume(ctx context.Context, pool *pgxpool.Po
 }
 
 // Q19: Discounted Revenue Query
-func (e *QueryExecutor) executeDiscountedRevenue(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeDiscountedRevenue(ctx context.Context, db apps.DB) (int64, error) {
 	brand1 := fmt.Sprintf("Brand#%d", e.faker.Int(1, 5)*10+e.faker.Int(1, 5))
 	brand2 := fmt.Sprintf("Brand#%d", e.faker.Int(1, 5)*10+e.faker.Int(1, 5))
 	brand3 := fmt.Sprintf("Brand#%d", e.faker.Int(1, 5)*10+e.faker.Int(1, 5))
 
 	var revenue float64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT COALESCE(SUM(l_extendedprice * (1 - l_discount)), 0) AS revenue
         FROM lineitem, part
         WHERE p_partkey = l_partkey

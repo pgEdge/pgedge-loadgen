@@ -3,6 +3,7 @@ package docmgmt
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
@@ -131,6 +132,25 @@ func (a *App) ExecuteQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryRe
 	return a.executor.ExecuteRandomQuery(ctx, pool)
 }
 
+// ExecuteQueryConn executes a randomly selected query using a single connection.
+func (a *App) ExecuteQueryConn(ctx context.Context, conn *pgx.Conn) apps.QueryResult {
+	// Initialize executor if needed (lazy initialization to get counts)
+	if a.executor == nil {
+		numDocuments, numUsers, numFolders, numChunks := a.getTableCountsConn(ctx, conn)
+
+		// Initialize embedder with default if not set
+		if a.embedder == nil {
+			a.embedder = embeddings.NewEmbedder(embeddings.Config{
+				Mode:       "random",
+				Dimensions: 384,
+			})
+		}
+
+		a.executor = NewQueryExecutor(a.embedder, numDocuments, numUsers, numFolders, numChunks)
+	}
+	return a.executor.ExecuteRandomQuery(ctx, conn)
+}
+
 // RequiresPgvector returns true if the app needs pgvector extension.
 func (a *App) RequiresPgvector() bool {
 	return true
@@ -143,6 +163,17 @@ func (a *App) getTableCounts(ctx context.Context, pool *pgxpool.Pool) (int, int,
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM doc_user").Scan(&numUsers)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM folder").Scan(&numFolders)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM document_chunk").Scan(&numChunks)
+
+	return max(1, numDocuments), max(1, numUsers), max(1, numFolders), max(1, numChunks)
+}
+
+func (a *App) getTableCountsConn(ctx context.Context, conn *pgx.Conn) (int, int, int, int) {
+	var numDocuments, numUsers, numFolders, numChunks int
+
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM document").Scan(&numDocuments)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM doc_user").Scan(&numUsers)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM folder").Scan(&numFolders)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM document_chunk").Scan(&numChunks)
 
 	return max(1, numDocuments), max(1, numUsers), max(1, numFolders), max(1, numChunks)
 }

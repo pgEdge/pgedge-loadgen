@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen/embeddings"
@@ -44,7 +42,7 @@ func NewQueryExecutor(embedder embeddings.Embedder, numArticles, numUsers, numCa
 }
 
 // ExecuteRandomQuery executes a random query based on weights.
-func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryResult {
+func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, db apps.DB) apps.QueryResult {
 	queryType := e.selectQueryType()
 
 	start := time.Now()
@@ -53,17 +51,17 @@ func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Po
 
 	switch queryType {
 	case "semantic_search":
-		rowsAffected, err = e.executeSemanticSearch(ctx, pool)
+		rowsAffected, err = e.executeSemanticSearch(ctx, db)
 	case "similar_questions":
-		rowsAffected, err = e.executeSimilarQuestions(ctx, pool)
+		rowsAffected, err = e.executeSimilarQuestions(ctx, db)
 	case "browse_category":
-		rowsAffected, err = e.executeBrowseCategory(ctx, pool)
+		rowsAffected, err = e.executeBrowseCategory(ctx, db)
 	case "view_article":
-		rowsAffected, err = e.executeViewArticle(ctx, pool)
+		rowsAffected, err = e.executeViewArticle(ctx, db)
 	case "submit_feedback":
-		rowsAffected, err = e.executeSubmitFeedback(ctx, pool)
+		rowsAffected, err = e.executeSubmitFeedback(ctx, db)
 	case "admin_update":
-		rowsAffected, err = e.executeAdminUpdate(ctx, pool)
+		rowsAffected, err = e.executeAdminUpdate(ctx, db)
 	}
 
 	return apps.QueryResult{
@@ -85,7 +83,7 @@ func (e *QueryExecutor) selectQueryType() string {
 }
 
 // Semantic Search - Vector similarity search for articles
-func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, db apps.DB) (int64, error) {
 	searchQueries := []string{
 		"how to reset my password",
 		"export data to csv format",
@@ -118,7 +116,7 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 		userID = e.faker.Int(1, e.numUsers)
 	}
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         WITH search_results AS (
             SELECT a.id, a.title, a.summary, c.name AS category,
                    1 - (a.embedding <=> $1::vector) AS similarity
@@ -141,7 +139,7 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 	}
 
 	// Log the search (fire and forget)
-	_, _ = pool.Exec(ctx, `
+	_, _ = db.Exec(ctx, `
         INSERT INTO search_log (user_id, query_text, results_count, session_id, embedding)
         VALUES ($1, $2, $3, $4, $5::vector)
     `, userID, query, count, "sess_"+e.faker.UUID()[:8], formatEmbedding(queryEmbedding))
@@ -150,11 +148,11 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 }
 
 // Similar Questions - Find articles matching previous search queries
-func (e *QueryExecutor) executeSimilarQuestions(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSimilarQuestions(ctx context.Context, db apps.DB) (int64, error) {
 	// Get a random search log entry and find similar searches
 	searchID := e.faker.Int(1, e.numSearches)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT s2.id, s2.query_text,
                1 - (s2.embedding <=> s1.embedding) AS similarity,
                s2.clicked_article
@@ -178,10 +176,10 @@ func (e *QueryExecutor) executeSimilarQuestions(ctx context.Context, pool *pgxpo
 }
 
 // Browse Category - Traditional category-based browsing
-func (e *QueryExecutor) executeBrowseCategory(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeBrowseCategory(ctx context.Context, db apps.DB) (int64, error) {
 	categoryID := e.faker.Int(1, e.numCategories)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT a.id, a.title, a.summary, a.view_count, a.helpful_count,
                u.username AS author,
                array_agg(t.name) AS tags
@@ -207,16 +205,16 @@ func (e *QueryExecutor) executeBrowseCategory(ctx context.Context, pool *pgxpool
 }
 
 // View Article - Read full article content with sections
-func (e *QueryExecutor) executeViewArticle(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeViewArticle(ctx context.Context, db apps.DB) (int64, error) {
 	articleID := e.faker.Int(1, e.numArticles)
 
 	// Update view count
-	_, _ = pool.Exec(ctx, `
+	_, _ = db.Exec(ctx, `
         UPDATE article SET view_count = view_count + 1 WHERE id = $1
     `, articleID)
 
 	// Fetch article with sections
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT a.id, a.title, a.content, a.summary, c.name AS category,
                u.username AS author, a.published_at,
                s.title AS section_title, s.content AS section_content, s.section_order
@@ -238,7 +236,7 @@ func (e *QueryExecutor) executeViewArticle(ctx context.Context, pool *pgxpool.Po
 	}
 
 	// Also fetch related articles
-	relatedRows, err := pool.Query(ctx, `
+	relatedRows, err := db.Query(ctx, `
         SELECT r.related_id, a.title, a.summary, r.similarity
         FROM related_article r
         JOIN article a ON r.related_id = a.id
@@ -257,7 +255,7 @@ func (e *QueryExecutor) executeViewArticle(ctx context.Context, pool *pgxpool.Po
 }
 
 // Submit Feedback - Rate article helpfulness
-func (e *QueryExecutor) executeSubmitFeedback(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSubmitFeedback(ctx context.Context, db apps.DB) (int64, error) {
 	articleID := e.faker.Int(1, e.numArticles)
 	isHelpful := e.faker.Float64(0, 1) > 0.25 // 75% helpful
 
@@ -281,7 +279,7 @@ func (e *QueryExecutor) executeSubmitFeedback(ctx context.Context, pool *pgxpool
 		}
 	}
 
-	_, err := pool.Exec(ctx, `
+	_, err := db.Exec(ctx, `
         INSERT INTO feedback (article_id, user_id, is_helpful, comment, session_id)
         VALUES ($1, $2, $3, $4, $5)
     `, articleID, userID, isHelpful, comment, "sess_"+e.faker.UUID()[:8])
@@ -291,11 +289,11 @@ func (e *QueryExecutor) executeSubmitFeedback(ctx context.Context, pool *pgxpool
 
 	// Update article counts
 	if isHelpful {
-		_, _ = pool.Exec(ctx, `
+		_, _ = db.Exec(ctx, `
             UPDATE article SET helpful_count = helpful_count + 1 WHERE id = $1
         `, articleID)
 	} else {
-		_, _ = pool.Exec(ctx, `
+		_, _ = db.Exec(ctx, `
             UPDATE article SET unhelpful_count = unhelpful_count + 1 WHERE id = $1
         `, articleID)
 	}
@@ -304,7 +302,7 @@ func (e *QueryExecutor) executeSubmitFeedback(ctx context.Context, pool *pgxpool
 }
 
 // Admin Update - Update article content
-func (e *QueryExecutor) executeAdminUpdate(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeAdminUpdate(ctx context.Context, db apps.DB) (int64, error) {
 	articleID := e.faker.Int(1, e.numArticles)
 
 	// Simulate different types of updates
@@ -315,7 +313,7 @@ func (e *QueryExecutor) executeAdminUpdate(ctx context.Context, pool *pgxpool.Po
 		// Update content and regenerate embedding
 		newContent := e.faker.Paragraph(3, 4, 12, "\n\n")
 		embedding := e.embedder.Embed(newContent)
-		_, err := pool.Exec(ctx, `
+		_, err := db.Exec(ctx, `
             UPDATE article
             SET content = $1, embedding = $2::vector, updated_at = NOW()
             WHERE id = $3
@@ -326,7 +324,7 @@ func (e *QueryExecutor) executeAdminUpdate(ctx context.Context, pool *pgxpool.Po
 		// Update status
 		statuses := []string{"draft", "published", "archived"}
 		newStatus := datagen.Choose(e.faker, statuses)
-		_, err := pool.Exec(ctx, `
+		_, err := db.Exec(ctx, `
             UPDATE article SET status = $1, updated_at = NOW() WHERE id = $2
         `, newStatus, articleID)
 		return 1, err
@@ -336,7 +334,7 @@ func (e *QueryExecutor) executeAdminUpdate(ctx context.Context, pool *pgxpool.Po
 		titles := []string{"Update", "Additional Information", "Note", "Appendix"}
 		content := e.faker.Paragraph(1, 3, 10, "\n\n")
 		embedding := e.embedder.Embed(content)
-		_, err := pool.Exec(ctx, `
+		_, err := db.Exec(ctx, `
             INSERT INTO article_section (article_id, title, content, section_order, embedding)
             SELECT $1, $2, $3, COALESCE(MAX(section_order), 0) + 1, $4::vector
             FROM article_section WHERE article_id = $1

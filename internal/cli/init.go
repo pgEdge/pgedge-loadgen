@@ -86,7 +86,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Connect to database
 	ctx := context.Background()
-	pool, err := db.Connect(ctx, cfg.Connection)
+	pool, err := db.Connect(ctx, cfg.Connection, "init")
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}

@@ -4,8 +4,20 @@ package apps
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// DB is an interface that both *pgxpool.Pool and *pgx.Conn satisfy.
+// This allows query executors to work with either a connection pool or
+// a dedicated single connection.
+type DB interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 // GeneratorConfig holds configuration for data generation.
 type GeneratorConfig struct {
@@ -66,6 +78,9 @@ type App interface {
 
 	// ExecuteQuery executes a randomly selected query based on the query mix.
 	ExecuteQuery(ctx context.Context, pool *pgxpool.Pool) QueryResult
+
+	// ExecuteQueryConn executes a randomly selected query using a single connection.
+	ExecuteQueryConn(ctx context.Context, conn *pgx.Conn) QueryResult
 
 	// RequiresPgvector returns true if the app needs pgvector extension.
 	RequiresPgvector() bool

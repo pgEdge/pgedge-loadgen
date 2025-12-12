@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen/embeddings"
@@ -46,7 +44,7 @@ func NewQueryExecutor(embedder embeddings.Embedder, numProducts, numCustomers, n
 }
 
 // ExecuteRandomQuery executes a random query based on weights.
-func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryResult {
+func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, db apps.DB) apps.QueryResult {
 	queryType := e.selectQueryType()
 
 	start := time.Now()
@@ -55,21 +53,21 @@ func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Po
 
 	switch queryType {
 	case "semantic_search":
-		rowsAffected, err = e.executeSemanticSearch(ctx, pool)
+		rowsAffected, err = e.executeSemanticSearch(ctx, db)
 	case "category_browse":
-		rowsAffected, err = e.executeCategoryBrowse(ctx, pool)
+		rowsAffected, err = e.executeCategoryBrowse(ctx, db)
 	case "similar_products":
-		rowsAffected, err = e.executeSimilarProducts(ctx, pool)
+		rowsAffected, err = e.executeSimilarProducts(ctx, db)
 	case "add_to_cart":
-		rowsAffected, err = e.executeAddToCart(ctx, pool)
+		rowsAffected, err = e.executeAddToCart(ctx, db)
 	case "checkout":
-		rowsAffected, err = e.executeCheckout(ctx, pool)
+		rowsAffected, err = e.executeCheckout(ctx, db)
 	case "submit_review":
-		rowsAffected, err = e.executeSubmitReview(ctx, pool)
+		rowsAffected, err = e.executeSubmitReview(ctx, db)
 	case "order_history":
-		rowsAffected, err = e.executeOrderHistory(ctx, pool)
+		rowsAffected, err = e.executeOrderHistory(ctx, db)
 	case "inventory_check":
-		rowsAffected, err = e.executeInventoryCheck(ctx, pool)
+		rowsAffected, err = e.executeInventoryCheck(ctx, db)
 	}
 
 	return apps.QueryResult{
@@ -91,7 +89,7 @@ func (e *QueryExecutor) selectQueryType() string {
 }
 
 // Semantic Search - Vector similarity search for products
-func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, db apps.DB) (int64, error) {
 	// Generate a search query
 	searchTerms := []string{
 		"comfortable running shoes",
@@ -106,7 +104,7 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 	searchQuery := datagen.Choose(e.faker, searchTerms)
 	queryEmbedding := e.embedder.Embed(searchQuery)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT p.id, p.name, p.description, p.price, c.name AS category,
                1 - (p.embedding <=> $1::vector) AS similarity
         FROM product p
@@ -128,10 +126,10 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 }
 
 // Category Browse - Traditional category-based browsing
-func (e *QueryExecutor) executeCategoryBrowse(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeCategoryBrowse(ctx context.Context, db apps.DB) (int64, error) {
 	categoryID := e.faker.Int(1, e.numCategories)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT p.id, p.name, p.price, b.name AS brand,
                COALESCE(AVG(r.rating), 0) AS avg_rating,
                COUNT(r.id) AS review_count
@@ -156,10 +154,10 @@ func (e *QueryExecutor) executeCategoryBrowse(ctx context.Context, pool *pgxpool
 }
 
 // Similar Products - Find products similar to a given product
-func (e *QueryExecutor) executeSimilarProducts(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSimilarProducts(ctx context.Context, db apps.DB) (int64, error) {
 	productID := e.faker.Int(1, e.numProducts)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT p2.id, p2.name, p2.price,
                1 - (p2.embedding <=> p1.embedding) AS similarity
         FROM product p1, product p2
@@ -182,13 +180,13 @@ func (e *QueryExecutor) executeSimilarProducts(ctx context.Context, pool *pgxpoo
 }
 
 // Add to Cart - Add a product to cart
-func (e *QueryExecutor) executeAddToCart(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeAddToCart(ctx context.Context, db apps.DB) (int64, error) {
 	customerID := e.faker.Int(1, e.numCustomers)
 	productID := e.faker.Int(1, e.numProducts)
 
 	// Get or create cart
 	var cartID int
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         INSERT INTO cart (customer_id)
         VALUES ($1)
         ON CONFLICT DO NOTHING
@@ -196,14 +194,14 @@ func (e *QueryExecutor) executeAddToCart(ctx context.Context, pool *pgxpool.Pool
     `, customerID).Scan(&cartID)
 	if err != nil {
 		// Cart might already exist, get it
-		err = pool.QueryRow(ctx, `SELECT id FROM cart WHERE customer_id = $1 ORDER BY id DESC LIMIT 1`, customerID).Scan(&cartID)
+		err = db.QueryRow(ctx, `SELECT id FROM cart WHERE customer_id = $1 ORDER BY id DESC LIMIT 1`, customerID).Scan(&cartID)
 		if err != nil {
 			return 0, err
 		}
 	}
 
 	// Add item to cart
-	_, err = pool.Exec(ctx, `
+	_, err = db.Exec(ctx, `
         INSERT INTO cart_item (cart_id, product_id, quantity)
         VALUES ($1, $2, $3)
         ON CONFLICT (cart_id, product_id)
@@ -217,13 +215,13 @@ func (e *QueryExecutor) executeAddToCart(ctx context.Context, pool *pgxpool.Pool
 }
 
 // Checkout - Create an order from cart
-func (e *QueryExecutor) executeCheckout(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeCheckout(ctx context.Context, db apps.DB) (int64, error) {
 	customerID := e.faker.Int(1, e.numCustomers)
 
 	// Check if customer has a cart with items
 	var cartID int
 	var itemCount int
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT c.id, COUNT(ci.id)
         FROM cart c
         LEFT JOIN cart_item ci ON c.id = ci.cart_id
@@ -239,7 +237,7 @@ func (e *QueryExecutor) executeCheckout(ctx context.Context, pool *pgxpool.Pool)
 
 	// Calculate order totals
 	var subtotal float64
-	err = pool.QueryRow(ctx, `
+	err = db.QueryRow(ctx, `
         SELECT COALESCE(SUM(p.price * ci.quantity), 0)
         FROM cart_item ci
         JOIN product p ON ci.product_id = p.id
@@ -259,7 +257,7 @@ func (e *QueryExecutor) executeCheckout(ctx context.Context, pool *pgxpool.Pool)
 
 	// Create order
 	var orderID int
-	err = pool.QueryRow(ctx, `
+	err = db.QueryRow(ctx, `
         INSERT INTO orders (customer_id, status, subtotal, tax, shipping, total, shipping_address, billing_address)
         VALUES ($1, 'pending', $2, $3, $4, $5, 'Default Address', 'Default Address')
         RETURNING id
@@ -269,7 +267,7 @@ func (e *QueryExecutor) executeCheckout(ctx context.Context, pool *pgxpool.Pool)
 	}
 
 	// Create order items from cart
-	_, err = pool.Exec(ctx, `
+	_, err = db.Exec(ctx, `
         INSERT INTO order_item (order_id, product_id, quantity, unit_price, total_price)
         SELECT $1, ci.product_id, ci.quantity, p.price, p.price * ci.quantity
         FROM cart_item ci
@@ -281,7 +279,7 @@ func (e *QueryExecutor) executeCheckout(ctx context.Context, pool *pgxpool.Pool)
 	}
 
 	// Clear cart
-	_, err = pool.Exec(ctx, `DELETE FROM cart_item WHERE cart_id = $1`, cartID)
+	_, err = db.Exec(ctx, `DELETE FROM cart_item WHERE cart_id = $1`, cartID)
 	if err != nil {
 		return 1, err
 	}
@@ -290,7 +288,7 @@ func (e *QueryExecutor) executeCheckout(ctx context.Context, pool *pgxpool.Pool)
 }
 
 // Submit Review - Add a product review
-func (e *QueryExecutor) executeSubmitReview(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSubmitReview(ctx context.Context, db apps.DB) (int64, error) {
 	productID := e.faker.Int(1, e.numProducts)
 	customerID := e.faker.Int(1, e.numCustomers)
 	rating := e.faker.Int(1, 5)
@@ -299,7 +297,7 @@ func (e *QueryExecutor) executeSubmitReview(ctx context.Context, pool *pgxpool.P
 
 	embedding := e.embedder.Embed(title + " " + text)
 
-	_, err := pool.Exec(ctx, `
+	_, err := db.Exec(ctx, `
         INSERT INTO product_review (product_id, customer_id, rating, title, review_text, verified, embedding)
         VALUES ($1, $2, $3, $4, $5, $6, $7::vector)
     `, productID, customerID, rating, title, text, e.faker.Bool(), formatEmbeddingForQuery(embedding))
@@ -311,10 +309,10 @@ func (e *QueryExecutor) executeSubmitReview(ctx context.Context, pool *pgxpool.P
 }
 
 // Order History - Get customer order history
-func (e *QueryExecutor) executeOrderHistory(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeOrderHistory(ctx context.Context, db apps.DB) (int64, error) {
 	customerID := e.faker.Int(1, e.numCustomers)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT o.id, o.status, o.total, o.created_at,
                COUNT(oi.id) AS item_count
         FROM orders o
@@ -337,10 +335,10 @@ func (e *QueryExecutor) executeOrderHistory(ctx context.Context, pool *pgxpool.P
 }
 
 // Inventory Check - Check stock levels
-func (e *QueryExecutor) executeInventoryCheck(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeInventoryCheck(ctx context.Context, db apps.DB) (int64, error) {
 	productID := e.faker.Int(1, e.numProducts)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT i.warehouse, i.quantity, i.reserved,
                (i.quantity - i.reserved) AS available
         FROM inventory i

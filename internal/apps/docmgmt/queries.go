@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen/embeddings"
@@ -46,7 +44,7 @@ func NewQueryExecutor(embedder embeddings.Embedder, numDocuments, numUsers, numF
 }
 
 // ExecuteRandomQuery executes a random query based on weights.
-func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryResult {
+func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, db apps.DB) apps.QueryResult {
 	queryType := e.selectQueryType()
 
 	start := time.Now()
@@ -55,19 +53,19 @@ func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Po
 
 	switch queryType {
 	case "semantic_search":
-		rowsAffected, err = e.executeSemanticSearch(ctx, pool)
+		rowsAffected, err = e.executeSemanticSearch(ctx, db)
 	case "find_similar":
-		rowsAffected, err = e.executeFindSimilar(ctx, pool)
+		rowsAffected, err = e.executeFindSimilar(ctx, db)
 	case "browse_folder":
-		rowsAffected, err = e.executeBrowseFolder(ctx, pool)
+		rowsAffected, err = e.executeBrowseFolder(ctx, db)
 	case "document_retrieve":
-		rowsAffected, err = e.executeDocumentRetrieve(ctx, pool)
+		rowsAffected, err = e.executeDocumentRetrieve(ctx, db)
 	case "version_history":
-		rowsAffected, err = e.executeVersionHistory(ctx, pool)
+		rowsAffected, err = e.executeVersionHistory(ctx, db)
 	case "upload_update":
-		rowsAffected, err = e.executeUploadUpdate(ctx, pool)
+		rowsAffected, err = e.executeUploadUpdate(ctx, db)
 	case "permission_check":
-		rowsAffected, err = e.executePermissionCheck(ctx, pool)
+		rowsAffected, err = e.executePermissionCheck(ctx, db)
 	}
 
 	return apps.QueryResult{
@@ -89,7 +87,7 @@ func (e *QueryExecutor) selectQueryType() string {
 }
 
 // Semantic Search - Vector similarity search for documents
-func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, db apps.DB) (int64, error) {
 	searchQueries := []string{
 		"quarterly financial report",
 		"employee onboarding checklist",
@@ -118,7 +116,7 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 	userID := e.faker.Int(1, e.numUsers)
 
 	// Search documents
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT d.id, d.title, d.description, d.file_type,
                f.name AS folder_name, u.full_name AS owner,
                1 - (d.embedding <=> $1::vector) AS similarity
@@ -140,7 +138,7 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 	}
 
 	// Also search document chunks for more granular results
-	chunkRows, err := pool.Query(ctx, `
+	chunkRows, err := db.Query(ctx, `
         SELECT c.id, c.document_id, d.title,
                c.content, c.start_page, c.end_page,
                1 - (c.embedding <=> $1::vector) AS similarity
@@ -158,7 +156,7 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 	}
 
 	// Log audit entry (fire and forget)
-	_, _ = pool.Exec(ctx, `
+	_, _ = db.Exec(ctx, `
         INSERT INTO audit_log (user_id, action, details, ip_address)
         VALUES ($1, 'search', $2::jsonb, $3)
     `, userID, fmt.Sprintf(`{"query": "%s", "results": %d}`, query, count),
@@ -168,10 +166,10 @@ func (e *QueryExecutor) executeSemanticSearch(ctx context.Context, pool *pgxpool
 }
 
 // Find Similar - Find documents similar to a given document
-func (e *QueryExecutor) executeFindSimilar(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeFindSimilar(ctx context.Context, db apps.DB) (int64, error) {
 	documentID := e.faker.Int(1, e.numDocuments)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT d2.id, d2.title, d2.file_type, d2.description,
                1 - (d2.embedding <=> d1.embedding) AS similarity
         FROM document d1, document d2
@@ -194,11 +192,11 @@ func (e *QueryExecutor) executeFindSimilar(ctx context.Context, pool *pgxpool.Po
 }
 
 // Browse Folder - Traditional folder-based browsing
-func (e *QueryExecutor) executeBrowseFolder(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeBrowseFolder(ctx context.Context, db apps.DB) (int64, error) {
 	folderID := e.faker.Int(1, e.numFolders)
 
 	// Get subfolders
-	subfolderRows, err := pool.Query(ctx, `
+	subfolderRows, err := db.Query(ctx, `
         SELECT f.id, f.name, f.path, u.full_name AS owner,
                COUNT(d.id) AS document_count
         FROM folder f
@@ -219,7 +217,7 @@ func (e *QueryExecutor) executeBrowseFolder(ctx context.Context, pool *pgxpool.P
 	}
 
 	// Get documents in folder
-	docRows, err := pool.Query(ctx, `
+	docRows, err := db.Query(ctx, `
         SELECT d.id, d.title, d.file_type, d.file_size, d.updated_at,
                u.full_name AS owner,
                array_agg(t.name) AS tags
@@ -244,12 +242,12 @@ func (e *QueryExecutor) executeBrowseFolder(ctx context.Context, pool *pgxpool.P
 }
 
 // Document Retrieve - Full document fetch with metadata
-func (e *QueryExecutor) executeDocumentRetrieve(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeDocumentRetrieve(ctx context.Context, db apps.DB) (int64, error) {
 	documentID := e.faker.Int(1, e.numDocuments)
 	userID := e.faker.Int(1, e.numUsers)
 
 	// Fetch document with metadata
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT d.id, d.title, d.description, d.file_type, d.file_size,
                d.mime_type, d.version, d.checksum, d.created_at, d.updated_at,
                f.name AS folder_name, f.path AS folder_path,
@@ -276,7 +274,7 @@ func (e *QueryExecutor) executeDocumentRetrieve(ctx context.Context, pool *pgxpo
 	}
 
 	// Log view action
-	_, _ = pool.Exec(ctx, `
+	_, _ = db.Exec(ctx, `
         INSERT INTO audit_log (user_id, document_id, action, ip_address)
         VALUES ($1, $2, 'view', $3)
     `, userID, documentID,
@@ -286,10 +284,10 @@ func (e *QueryExecutor) executeDocumentRetrieve(ctx context.Context, pool *pgxpo
 }
 
 // Version History - Get document version history
-func (e *QueryExecutor) executeVersionHistory(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeVersionHistory(ctx context.Context, db apps.DB) (int64, error) {
 	documentID := e.faker.Int(1, e.numDocuments)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT v.id, v.version_number, v.file_size, v.checksum,
                v.change_summary, v.created_at,
                u.full_name AS created_by
@@ -311,7 +309,7 @@ func (e *QueryExecutor) executeVersionHistory(ctx context.Context, pool *pgxpool
 }
 
 // Upload/Update - Upload new document or update existing
-func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, db apps.DB) (int64, error) {
 	userID := e.faker.Int(1, e.numUsers)
 
 	// 70% update existing, 30% new upload
@@ -328,7 +326,7 @@ func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, pool *pgxpool.P
 		embedding := e.embedder.Embed(content)
 
 		// Insert version
-		_, err := pool.Exec(ctx, `
+		_, err := db.Exec(ctx, `
             INSERT INTO document_version (document_id, version_number, file_size,
                                          checksum, change_summary, created_by, embedding)
             SELECT $1, COALESCE(MAX(version_number), 0) + 1, $2, $3, $4, $5, $6::vector
@@ -346,7 +344,7 @@ func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, pool *pgxpool.P
 		// Update document
 		newContent := e.faker.Paragraph(2, 4, 12, "\n\n")
 		newEmbedding := e.embedder.Embed(newContent)
-		_, err = pool.Exec(ctx, `
+		_, err = db.Exec(ctx, `
             UPDATE document
             SET version = version + 1, updated_at = NOW(), embedding = $1::vector
             WHERE id = $2
@@ -356,7 +354,7 @@ func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, pool *pgxpool.P
 		}
 
 		// Log action
-		_, _ = pool.Exec(ctx, `
+		_, _ = db.Exec(ctx, `
             INSERT INTO audit_log (user_id, document_id, action, ip_address)
             VALUES ($1, $2, 'edit', $3)
         `, userID, documentID,
@@ -378,7 +376,7 @@ func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, pool *pgxpool.P
 	embedding := e.embedder.Embed(content)
 
 	var docID int
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         INSERT INTO document (title, description, file_type, file_size, folder_id,
                              owner_id, status, embedding)
         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7::vector)
@@ -393,7 +391,7 @@ func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, pool *pgxpool.P
 	}
 
 	// Log action
-	_, _ = pool.Exec(ctx, `
+	_, _ = db.Exec(ctx, `
         INSERT INTO audit_log (user_id, document_id, action, ip_address)
         VALUES ($1, $2, 'upload', $3)
     `, userID, docID,
@@ -403,14 +401,14 @@ func (e *QueryExecutor) executeUploadUpdate(ctx context.Context, pool *pgxpool.P
 }
 
 // Permission Check - Check user access to document/folder
-func (e *QueryExecutor) executePermissionCheck(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+func (e *QueryExecutor) executePermissionCheck(ctx context.Context, db apps.DB) (int64, error) {
 	userID := e.faker.Int(1, e.numUsers)
 
 	// Check document permission
 	if e.faker.Float64(0, 1) > 0.5 {
 		documentID := e.faker.Int(1, e.numDocuments)
 
-		rows, err := pool.Query(ctx, `
+		rows, err := db.Query(ctx, `
             SELECT p.permission_type, p.granted_at, p.expires_at,
                    g.full_name AS granted_by
             FROM permission p
@@ -433,7 +431,7 @@ func (e *QueryExecutor) executePermissionCheck(ctx context.Context, pool *pgxpoo
 	// Check folder permission
 	folderID := e.faker.Int(1, e.numFolders)
 
-	rows, err := pool.Query(ctx, `
+	rows, err := db.Query(ctx, `
         SELECT p.permission_type, p.granted_at, p.expires_at,
                g.full_name AS granted_by
         FROM permission p

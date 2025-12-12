@@ -3,6 +3,7 @@ package knowledgebase
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
@@ -125,6 +126,25 @@ func (a *App) ExecuteQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryRe
 	return a.executor.ExecuteRandomQuery(ctx, pool)
 }
 
+// ExecuteQueryConn executes a randomly selected query using a single connection.
+func (a *App) ExecuteQueryConn(ctx context.Context, conn *pgx.Conn) apps.QueryResult {
+	// Initialize executor if needed (lazy initialization to get counts)
+	if a.executor == nil {
+		numArticles, numUsers, numCategories, numSearches := a.getTableCountsConn(ctx, conn)
+
+		// Initialize embedder with default if not set
+		if a.embedder == nil {
+			a.embedder = embeddings.NewEmbedder(embeddings.Config{
+				Mode:       "random",
+				Dimensions: 384,
+			})
+		}
+
+		a.executor = NewQueryExecutor(a.embedder, numArticles, numUsers, numCategories, numSearches)
+	}
+	return a.executor.ExecuteRandomQuery(ctx, conn)
+}
+
 // RequiresPgvector returns true if the app needs pgvector extension.
 func (a *App) RequiresPgvector() bool {
 	return true
@@ -137,6 +157,17 @@ func (a *App) getTableCounts(ctx context.Context, pool *pgxpool.Pool) (int, int,
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM kb_user").Scan(&numUsers)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM category").Scan(&numCategories)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM search_log").Scan(&numSearches)
+
+	return max(1, numArticles), max(1, numUsers), max(1, numCategories), max(1, numSearches)
+}
+
+func (a *App) getTableCountsConn(ctx context.Context, conn *pgx.Conn) (int, int, int, int) {
+	var numArticles, numUsers, numCategories, numSearches int
+
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM article").Scan(&numArticles)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM kb_user").Scan(&numUsers)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM category").Scan(&numCategories)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM search_log").Scan(&numSearches)
 
 	return max(1, numArticles), max(1, numUsers), max(1, numCategories), max(1, numSearches)
 }

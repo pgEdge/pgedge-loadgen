@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
 	"github.com/pgEdge/pgedge-loadgen/internal/datagen"
@@ -27,7 +26,7 @@ func NewQueryExecutor(numWarehouses int) *QueryExecutor {
 }
 
 // ExecuteRandomQuery executes a random query based on the TPC-C weights.
-func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryResult {
+func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, db apps.DB) apps.QueryResult {
 	// Select query type based on weights
 	queryType := e.selectQueryType()
 
@@ -36,15 +35,15 @@ func (e *QueryExecutor) ExecuteRandomQuery(ctx context.Context, pool *pgxpool.Po
 
 	switch queryType {
 	case "new_order":
-		err = e.executeNewOrder(ctx, pool)
+		err = e.executeNewOrder(ctx, db)
 	case "payment":
-		err = e.executePayment(ctx, pool)
+		err = e.executePayment(ctx, db)
 	case "order_status":
-		err = e.executeOrderStatus(ctx, pool)
+		err = e.executeOrderStatus(ctx, db)
 	case "delivery":
-		err = e.executeDelivery(ctx, pool)
+		err = e.executeDelivery(ctx, db)
 	case "stock_level":
-		err = e.executeStockLevel(ctx, pool)
+		err = e.executeStockLevel(ctx, db)
 	}
 
 	return apps.QueryResult{
@@ -61,13 +60,13 @@ func (e *QueryExecutor) selectQueryType() string {
 }
 
 // New Order transaction
-func (e *QueryExecutor) executeNewOrder(ctx context.Context, pool *pgxpool.Pool) error {
+func (e *QueryExecutor) executeNewOrder(ctx context.Context, db apps.DB) error {
 	wID := e.faker.Int(1, e.numWarehouses)
 	dID := e.faker.Int(1, 10)
 	cID := e.faker.Int(1, 3000)
 	olCnt := e.faker.Int(5, 15)
 
-	tx, err := pool.Begin(ctx)
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -171,13 +170,13 @@ func (e *QueryExecutor) executeNewOrder(ctx context.Context, pool *pgxpool.Pool)
 }
 
 // Payment transaction
-func (e *QueryExecutor) executePayment(ctx context.Context, pool *pgxpool.Pool) error {
+func (e *QueryExecutor) executePayment(ctx context.Context, db apps.DB) error {
 	wID := e.faker.Int(1, e.numWarehouses)
 	dID := e.faker.Int(1, 10)
 	cID := e.faker.Int(1, 3000)
 	amount := e.faker.Float64(1, 5000)
 
-	tx, err := pool.Begin(ctx)
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -223,7 +222,7 @@ func (e *QueryExecutor) executePayment(ctx context.Context, pool *pgxpool.Pool) 
 }
 
 // Order Status transaction
-func (e *QueryExecutor) executeOrderStatus(ctx context.Context, pool *pgxpool.Pool) error {
+func (e *QueryExecutor) executeOrderStatus(ctx context.Context, db apps.DB) error {
 	wID := e.faker.Int(1, e.numWarehouses)
 	dID := e.faker.Int(1, 10)
 	cID := e.faker.Int(1, 3000)
@@ -231,7 +230,7 @@ func (e *QueryExecutor) executeOrderStatus(ctx context.Context, pool *pgxpool.Po
 	// Get customer info
 	var cFirst, cMiddle, cLast string
 	var cBalance float64
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT c_first, c_middle, c_last, c_balance
         FROM customer WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3
     `, wID, dID, cID).Scan(&cFirst, &cMiddle, &cLast, &cBalance)
@@ -243,7 +242,7 @@ func (e *QueryExecutor) executeOrderStatus(ctx context.Context, pool *pgxpool.Po
 	var oID int
 	var oCarrierID *int
 	var oEntryD time.Time
-	err = pool.QueryRow(ctx, `
+	err = db.QueryRow(ctx, `
         SELECT o_id, o_carrier_id, o_entry_d
         FROM orders WHERE o_w_id = $1 AND o_d_id = $2 AND o_c_id = $3
         ORDER BY o_id DESC LIMIT 1
@@ -254,7 +253,7 @@ func (e *QueryExecutor) executeOrderStatus(ctx context.Context, pool *pgxpool.Po
 
 	if oID > 0 {
 		// Get order lines
-		rows, err := pool.Query(ctx, `
+		rows, err := db.Query(ctx, `
             SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
             FROM order_line WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3
         `, wID, dID, oID)
@@ -277,11 +276,11 @@ func (e *QueryExecutor) executeOrderStatus(ctx context.Context, pool *pgxpool.Po
 }
 
 // Delivery transaction
-func (e *QueryExecutor) executeDelivery(ctx context.Context, pool *pgxpool.Pool) error {
+func (e *QueryExecutor) executeDelivery(ctx context.Context, db apps.DB) error {
 	wID := e.faker.Int(1, e.numWarehouses)
 	carrierID := e.faker.Int(1, 10)
 
-	tx, err := pool.Begin(ctx)
+	tx, err := db.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -355,14 +354,14 @@ func (e *QueryExecutor) executeDelivery(ctx context.Context, pool *pgxpool.Pool)
 }
 
 // Stock Level transaction
-func (e *QueryExecutor) executeStockLevel(ctx context.Context, pool *pgxpool.Pool) error {
+func (e *QueryExecutor) executeStockLevel(ctx context.Context, db apps.DB) error {
 	wID := e.faker.Int(1, e.numWarehouses)
 	dID := e.faker.Int(1, 10)
 	threshold := e.faker.Int(10, 20)
 
 	// Get next order ID
 	var nextOID int
-	err := pool.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
         SELECT d_next_o_id FROM district WHERE d_w_id = $1 AND d_id = $2
     `, wID, dID).Scan(&nextOID)
 	if err != nil {
@@ -371,7 +370,7 @@ func (e *QueryExecutor) executeStockLevel(ctx context.Context, pool *pgxpool.Poo
 
 	// Count items below threshold
 	var lowStock int
-	err = pool.QueryRow(ctx, `
+	err = db.QueryRow(ctx, `
         SELECT COUNT(DISTINCT s_i_id)
         FROM order_line
         JOIN stock ON s_i_id = ol_i_id AND s_w_id = ol_w_id

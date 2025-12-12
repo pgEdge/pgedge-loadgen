@@ -3,6 +3,7 @@ package retail
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
@@ -132,6 +133,16 @@ func (a *App) ExecuteQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryRe
 	return a.executor.ExecuteRandomQuery(ctx, pool)
 }
 
+// ExecuteQueryConn executes a randomly selected query using a single connection.
+func (a *App) ExecuteQueryConn(ctx context.Context, conn *pgx.Conn) apps.QueryResult {
+	// Initialize executor if needed (lazy initialization to get counts)
+	if a.executor == nil {
+		numItems, numCustomers, numStores := a.getTableCountsConn(ctx, conn)
+		a.executor = NewQueryExecutor(numItems, numCustomers, numStores)
+	}
+	return a.executor.ExecuteRandomQuery(ctx, conn)
+}
+
 // RequiresPgvector returns true if the app needs pgvector extension.
 func (a *App) RequiresPgvector() bool {
 	return false
@@ -143,6 +154,16 @@ func (a *App) getTableCounts(ctx context.Context, pool *pgxpool.Pool) (int, int,
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM item").Scan(&numItems)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM customer").Scan(&numCustomers)
 	_ = pool.QueryRow(ctx, "SELECT COUNT(*) FROM store").Scan(&numStores)
+
+	return max(1, numItems), max(1, numCustomers), max(1, numStores)
+}
+
+func (a *App) getTableCountsConn(ctx context.Context, conn *pgx.Conn) (int, int, int) {
+	var numItems, numCustomers, numStores int
+
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM item").Scan(&numItems)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM customer").Scan(&numCustomers)
+	_ = conn.QueryRow(ctx, "SELECT COUNT(*) FROM store").Scan(&numStores)
 
 	return max(1, numItems), max(1, numCustomers), max(1, numStores)
 }

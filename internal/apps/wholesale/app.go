@@ -3,6 +3,7 @@ package wholesale
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/pgEdge/pgedge-loadgen/internal/apps"
@@ -96,6 +97,16 @@ func (a *App) ExecuteQuery(ctx context.Context, pool *pgxpool.Pool) apps.QueryRe
 	return a.executor.ExecuteRandomQuery(ctx, pool)
 }
 
+// ExecuteQueryConn executes a randomly selected query using a single connection.
+func (a *App) ExecuteQueryConn(ctx context.Context, conn *pgx.Conn) apps.QueryResult {
+	// Initialize executor if needed (lazy initialization to get warehouse count)
+	if a.executor == nil {
+		numWarehouses := a.getWarehouseCountConn(ctx, conn)
+		a.executor = NewQueryExecutor(numWarehouses)
+	}
+	return a.executor.ExecuteRandomQuery(ctx, conn)
+}
+
 // RequiresPgvector returns true if the app needs pgvector extension.
 func (a *App) RequiresPgvector() bool {
 	return false
@@ -104,6 +115,15 @@ func (a *App) RequiresPgvector() bool {
 func (a *App) getWarehouseCount(ctx context.Context, pool *pgxpool.Pool) int {
 	var count int
 	err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM warehouse").Scan(&count)
+	if err != nil {
+		return 1
+	}
+	return max(1, count)
+}
+
+func (a *App) getWarehouseCountConn(ctx context.Context, conn *pgx.Conn) int {
+	var count int
+	err := conn.QueryRow(ctx, "SELECT COUNT(*) FROM warehouse").Scan(&count)
 	if err != nil {
 		return 1
 	}
