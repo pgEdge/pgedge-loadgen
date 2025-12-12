@@ -8,7 +8,7 @@ import (
 
 // Build information set at compile time via ldflags.
 var (
-	Version   = "1.0.0-alpha1"
+	Version   = "1.0.0-alpha2"
 	Commit    = "unknown"
 	BuildDate = "unknown"
 )
