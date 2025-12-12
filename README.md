@@ -1,6 +1,7 @@
 # pgEdge Load Generator
 
 [![CI](https://github.com/pgEdge/pgedge-loadgen/actions/workflows/ci.yml/badge.svg)](https://github.com/pgEdge/pgedge-loadgen/actions/workflows/ci.yml)
+[![Release](https://github.com/pgEdge/pgedge-loadgen/actions/workflows/release.yml/badge.svg)](https://github.com/pgEdge/pgedge-loadgen/actions/workflows/release.yml)
 
 A CLI tool for generating realistic PostgreSQL workloads. Creates schemas
 for fictional applications, populates them with test data, and runs load
