@@ -1,3 +1,12 @@
+//-------------------------------------------------------------------------
+//
+// pgEdge Load Generator
+//
+// Portions copyright (c) 2025 - 2026, pgEdge, Inc.
+// This software is released under The PostgreSQL License
+//
+//-------------------------------------------------------------------------
+
 // Package config handles configuration management for pgedge-loadgen.
 // Configuration is loaded from config files and CLI flags (no environment variables).
 // CLI flags take precedence over config file values.

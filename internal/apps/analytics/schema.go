@@ -1,3 +1,12 @@
+//-------------------------------------------------------------------------
+//
+// pgEdge Load Generator
+//
+// Portions copyright (c) 2025 - 2026, pgEdge, Inc.
+// This software is released under The PostgreSQL License
+//
+//-------------------------------------------------------------------------
+
 // Package analytics implements the Analytics Warehouse application (TPC-H based).
 package analytics
 

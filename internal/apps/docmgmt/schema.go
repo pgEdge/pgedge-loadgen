@@ -1,3 +1,12 @@
+//-------------------------------------------------------------------------
+//
+// pgEdge Load Generator
+//
+// Portions copyright (c) 2025 - 2026, pgEdge, Inc.
+// This software is released under The PostgreSQL License
+//
+//-------------------------------------------------------------------------
+
 // Package docmgmt implements the Document Management application with semantic search.
 package docmgmt
 

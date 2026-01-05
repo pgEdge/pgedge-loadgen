@@ -1,3 +1,12 @@
+//-------------------------------------------------------------------------
+//
+// pgEdge Load Generator
+//
+// Portions copyright (c) 2025 - 2026, pgEdge, Inc.
+// This software is released under The PostgreSQL License
+//
+//-------------------------------------------------------------------------
+
 // Package main is the entry point for pgedge-loadgen.
 package main
 

@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Automatic size maintenance for the wholesale application: old orders are
+  periodically deleted to maintain the database at the target size specified
+  during initialisation. This prevents unbounded growth during long-running
+  tests and simulates real-world data archival practices.
+- New `--no-maintain-size` flag for the `run` command to disable automatic
+  cleanup if unbounded growth is desired.
+- `SizeMaintainer` interface allowing other applications to implement size
+  maintenance in future.
+
 ## [1.0.0-alpha2] - 2025-12-12
 
 ### Changed

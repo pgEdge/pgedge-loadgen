@@ -1,3 +1,12 @@
+//-------------------------------------------------------------------------
+//
+// pgEdge Load Generator
+//
+// Portions copyright (c) 2025 - 2026, pgEdge, Inc.
+// This software is released under The PostgreSQL License
+//
+//-------------------------------------------------------------------------
+
 package wholesale
 
 import (
@@ -129,6 +138,10 @@ func (a *App) deleteOldestOrders(ctx context.Context, conn *pgx.Conn, limit int6
 		ordersToDelete = append(ordersToDelete, k)
 	}
 	rows.Close()
+
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("error iterating orders: %w", err)
+	}
 
 	if len(ordersToDelete) == 0 {
 		return 0, nil
