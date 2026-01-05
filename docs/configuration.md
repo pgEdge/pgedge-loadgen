@@ -185,6 +185,7 @@ pgedge-loadgen run --config ./my-config.yaml --connections 100
 
 ### Create Config in Default Location
 
+{% raw %}
 ```bash
 # Create user config directory
 mkdir -p ~/.config/pgedge-loadgen
@@ -202,6 +203,7 @@ run:
     profile: local-office
 EOF
 ```
+{% endraw %}
 
 ## CLI Flag Precedence
 
