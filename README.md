@@ -78,4 +78,4 @@ make build
 
 ## License
 
-Copyright 2025 pgEdge, Inc. See [LICENCE.md](LICENCE.md) for details.
+Copyright 2025 - 2026, pgEdge, Inc. See [LICENCE.md](LICENCE.md) for details.
