@@ -41,6 +41,22 @@ districts, customers, orders, and inventory management.
 - Validating transaction isolation
 - Testing write-heavy workloads
 
+**Size Maintenance:**
+
+The wholesale application continuously creates new orders, which can cause
+unbounded database growth over long-running tests. By default, automatic
+size maintenance is enabled: every 5 minutes, if the orders and order_line
+tables exceed 110% of the target size specified during `init`, the oldest
+orders are deleted to bring the database back to the target size. This
+simulates real-world data archival practices.
+
+To disable this behaviour and allow unbounded growth, use the
+`--no-maintain-size` flag when running:
+
+```bash
+pgedge-loadgen run --app wholesale --no-maintain-size
+```
+
 ---
 
 ### Analytics Warehouse (TPC-H Based)

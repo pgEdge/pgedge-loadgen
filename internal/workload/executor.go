@@ -26,10 +26,13 @@ type ExecutorConfig struct {
 	Timezone           string
 	ReportInterval     int
 	ConnectionMode     string
-	SessionMinDuration int // seconds
-	SessionMaxDuration int // seconds
-	ThinkTimeMin       int // milliseconds
-	ThinkTimeMax       int // milliseconds
+	SessionMinDuration int   // seconds
+	SessionMaxDuration int   // seconds
+	ThinkTimeMin       int   // milliseconds
+	ThinkTimeMax       int   // milliseconds
+	MaintainSize       bool  // Enable automatic cleanup to maintain target size
+	TargetSize         int64 // Target database size in bytes
+	CleanupInterval    int   // Cleanup check interval in seconds (default 300)
 }
 
 // Executor manages the workload execution.
@@ -47,6 +50,11 @@ type Executor struct {
 	thinkTimeMin       time.Duration
 	thinkTimeMax       time.Duration
 
+	// Size maintenance settings
+	maintainSize    bool
+	targetSize      int64
+	cleanupInterval time.Duration
+
 	// Metrics
 	totalQueries    atomic.Int64
 	successQueries  atomic.Int64
@@ -57,6 +65,9 @@ type Executor struct {
 	// Session metrics (session mode only)
 	totalSessions  atomic.Int64
 	activeSessions atomic.Int64
+
+	// Cleanup metrics
+	totalDeleted atomic.Int64
 
 	// Query type metrics
 	queryMetrics sync.Map // map[string]*queryMetric
@@ -81,6 +92,12 @@ func NewExecutor(cfg ExecutorConfig) (*Executor, error) {
 		connectionMode = "pool"
 	}
 
+	// Default cleanup interval to 5 minutes
+	cleanupInterval := cfg.CleanupInterval
+	if cleanupInterval == 0 {
+		cleanupInterval = 300
+	}
+
 	return &Executor{
 		connString:         cfg.ConnString,
 		app:                cfg.App,
@@ -92,6 +109,9 @@ func NewExecutor(cfg ExecutorConfig) (*Executor, error) {
 		sessionMaxDuration: time.Duration(cfg.SessionMaxDuration) * time.Second,
 		thinkTimeMin:       time.Duration(cfg.ThinkTimeMin) * time.Millisecond,
 		thinkTimeMax:       time.Duration(cfg.ThinkTimeMax) * time.Millisecond,
+		maintainSize:       cfg.MaintainSize,
+		targetSize:         cfg.TargetSize,
+		cleanupInterval:    time.Duration(cleanupInterval) * time.Second,
 	}, nil
 }
 
@@ -121,6 +141,13 @@ func (e *Executor) Run(ctx context.Context) error {
 	// Start reporter
 	if e.reportInterval > 0 {
 		go e.reporter(ctx)
+	}
+
+	// Start size maintenance if enabled and app supports it
+	if e.maintainSize && e.targetSize > 0 {
+		if _, ok := e.app.(apps.SizeMaintainer); ok {
+			go e.cleaner(ctx)
+		}
 	}
 
 	// Wait for all workers to complete
@@ -390,6 +417,50 @@ func (e *Executor) reporter(ctx context.Context) {
 
 			lastTotal = total
 			lastTime = now
+		}
+	}
+}
+
+// cleaner periodically checks if the database has grown beyond the target size
+// and deletes old data to bring it back within bounds.
+func (e *Executor) cleaner(ctx context.Context) {
+	ticker := time.NewTicker(e.cleanupInterval)
+	defer ticker.Stop()
+
+	maintainer := e.app.(apps.SizeMaintainer)
+
+	logging.Info().
+		Int64("target_size_bytes", e.targetSize).
+		Dur("cleanup_interval", e.cleanupInterval).
+		Msg("Size maintenance enabled")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// Create a dedicated connection for cleanup
+			conn, err := db.ConnectSingle(ctx, e.connString, "cleaner")
+			if err != nil {
+				logging.Error().Err(err).Msg("Failed to create cleanup connection")
+				continue
+			}
+
+			deleted, err := maintainer.MaintainSize(ctx, conn, e.targetSize)
+			conn.Close(ctx)
+
+			if err != nil {
+				logging.Error().Err(err).Msg("Size maintenance failed")
+				continue
+			}
+
+			if deleted > 0 {
+				e.totalDeleted.Add(deleted)
+				logging.Info().
+					Int64("deleted", deleted).
+					Int64("total_deleted", e.totalDeleted.Load()).
+					Msg("Size maintenance completed")
+			}
 		}
 	}
 }

@@ -27,6 +27,7 @@ var (
 	runSessionMaxDuration int
 	runThinkTimeMin       int
 	runThinkTimeMax       int
+	runNoMaintainSize     bool
 )
 
 var runCmd = &cobra.Command{
@@ -68,6 +69,8 @@ func init() {
 		"minimum think time between queries in milliseconds (session mode only)")
 	runCmd.Flags().IntVar(&runThinkTimeMax, "think-time-max", 0,
 		"maximum think time between queries in milliseconds (session mode only)")
+	runCmd.Flags().BoolVar(&runNoMaintainSize, "no-maintain-size", false,
+		"disable automatic cleanup of old data to maintain target database size")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -135,6 +138,26 @@ func runRun(cmd *cobra.Command, args []string) error {
 			existingApp, cfg.App, existingApp)
 	}
 
+	// Get target size for size maintenance
+	var targetSize int64
+	maintainSize := !runNoMaintainSize
+	if maintainSize {
+		targetSizeStr, err := db.GetMetadataValueConn(ctx, conn, "target_size")
+		if err != nil {
+			logging.Warn().
+				Msg("Could not retrieve target_size; size maintenance disabled")
+			maintainSize = false
+		} else {
+			targetSize, err = parseSize(targetSizeStr)
+			if err != nil {
+				logging.Warn().
+					Str("target_size", targetSizeStr).
+					Msg("Could not parse target_size; size maintenance disabled")
+				maintainSize = false
+			}
+		}
+	}
+
 	// Close metadata connection - workers will create their own connections
 	conn.Close(ctx)
 
@@ -184,6 +207,8 @@ func runRun(cmd *cobra.Command, args []string) error {
 		SessionMaxDuration: cfg.Run.SessionMaxDuration,
 		ThinkTimeMin:       cfg.Run.ThinkTimeMin,
 		ThinkTimeMax:       cfg.Run.ThinkTimeMax,
+		MaintainSize:       maintainSize,
+		TargetSize:         targetSize,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create executor: %w", err)

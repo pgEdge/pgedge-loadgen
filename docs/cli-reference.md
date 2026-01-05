@@ -174,6 +174,7 @@ pgedge-loadgen run [options]
 | `--session-max-duration` | Max session length (seconds) | `1800` |
 | `--think-time-min` | Min think time (milliseconds) | `1000` |
 | `--think-time-max` | Max think time (milliseconds) | `5000` |
+| `--no-maintain-size` | Disable automatic cleanup of old data | `false` |
 
 **Examples:**
 

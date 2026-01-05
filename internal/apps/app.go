@@ -114,3 +114,12 @@ type TableDefinition struct {
 	// a table with ScaleRatio 10 would have 10000 rows.
 	ScaleRatio float64
 }
+
+// SizeMaintainer is an optional interface that apps can implement to support
+// automatic cleanup of old data to maintain the target database size.
+type SizeMaintainer interface {
+	// MaintainSize checks if the database has grown beyond the target size
+	// and deletes old data to bring it back within bounds.
+	// Returns the number of records deleted and any error.
+	MaintainSize(ctx context.Context, conn *pgx.Conn, targetSize int64) (int64, error)
+}
