@@ -427,6 +427,50 @@ func TestLoadConfigDefaultPath(t *testing.T) {
 	}
 }
 
+func TestLoadConfigBinaryInSearchPath(t *testing.T) {
+	// Regression test for https://github.com/pgEdge/pgedge-loadgen/issues/1
+	// When an extensionless binary named "pgedge-loadgen" exists in the
+	// search path, Load should ignore it rather than trying to parse it
+	// as YAML (which would fail with "control characters are not allowed").
+	tmpDir := t.TempDir()
+	binaryPath := filepath.Join(tmpDir, "pgedge-loadgen")
+
+	// Write binary content (control characters that would break YAML)
+	binaryContent := []byte{0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01, 0x02}
+	err := os.WriteFile(binaryPath, binaryContent, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create fake binary: %v", err)
+	}
+
+	// Save and restore working directory
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(origDir); err != nil {
+			t.Fatalf("Failed to restore directory: %v", err)
+		}
+	}()
+
+	// Change to the temp dir so Viper searches there
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+
+	// Load should succeed with defaults, not fail with YAML parse error
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load should not error when binary exists in search path, got: %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("Load should return default config")
+	}
+	if cfg.LogLevel != "info" {
+		t.Errorf("Expected default LogLevel 'info', got '%s'", cfg.LogLevel)
+	}
+}
+
 func TestLoadConfigInvalidYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "invalid.yaml")

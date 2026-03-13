@@ -127,25 +127,27 @@ func DefaultConfig() *Config {
 func Load(configFile string) (*Config, error) {
 	v := viper.New()
 
-	// Set config name and type
-	v.SetConfigName("pgedge-loadgen")
-	v.SetConfigType("yaml")
-
-	// Add config paths
-	v.AddConfigPath(".")
-	if home, err := os.UserHomeDir(); err == nil {
-		v.AddConfigPath(filepath.Join(home, ".config", "pgedge-loadgen"))
-	}
-
 	// Use specific config file if provided
 	if configFile != "" {
 		v.SetConfigFile(configFile)
+	} else {
+		// Set config name only; do not call SetConfigType so that
+		// Viper will not attempt to read extensionless files (such
+		// as the binary itself) as YAML.
+		v.SetConfigName("pgedge-loadgen")
+
+		// Add config paths
+		v.AddConfigPath(".")
+		if home, err := os.UserHomeDir(); err == nil {
+			v.AddConfigPath(filepath.Join(home, ".config", "pgedge-loadgen"))
+		}
 	}
 
 	// Read config file (ignore if not found)
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("error reading config file: %w", err)
+			return nil, fmt.Errorf("error reading config file %s: %w",
+				v.ConfigFileUsed(), err)
 		}
 	}
 
