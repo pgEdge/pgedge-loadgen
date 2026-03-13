@@ -27,6 +27,7 @@ var (
 	initVectorizerURL       string
 	initOpenAIAPIKey        string
 	initDropExisting        bool
+	initConcurrency         int
 )
 
 var initCmd = &cobra.Command{
@@ -54,6 +55,8 @@ func init() {
 		"OpenAI API key for embeddings")
 	initCmd.Flags().BoolVar(&initDropExisting, "drop-existing", false,
 		"drop existing schema before initialization")
+	initCmd.Flags().IntVar(&initConcurrency, "concurrency", 0,
+		"number of concurrent database connections (default: 4)")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -76,6 +79,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if initDropExisting {
 		cfg.Init.DropExisting = true
 	}
+	if initConcurrency > 0 {
+		cfg.Init.Concurrency = initConcurrency
+	}
 
 	// Validate configuration
 	if err := cfg.ValidateInit(); err != nil {
@@ -95,7 +101,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Connect to database
 	ctx := context.Background()
-	pool, err := db.Connect(ctx, cfg.Connection, "init")
+	pool, err := db.Connect(ctx, cfg.Connection, int32(cfg.Init.Concurrency), "init")
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}

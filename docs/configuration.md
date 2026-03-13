@@ -59,6 +59,10 @@ init:
     # Default: false
     drop_existing: false
 
+    # Number of concurrent connections for data loading
+    # Default: 4
+    concurrency: 4
+
 # Configuration for 'run' command
 run:
     # Number of database connections

@@ -40,65 +40,15 @@ func DefaultPoolConfig() *pgxpool.Config {
 	return config
 }
 
-// Connect establishes a connection pool to the PostgreSQL database.
-func Connect(ctx context.Context, connString string, appNameSuffix string) (*pgxpool.Pool, error) {
+// Connect establishes a connection pool to the PostgreSQL database
+// with a specified maximum number of connections.
+func Connect(ctx context.Context, connString string, maxConns int32, appNameSuffix string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(connString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse connection string: %w", err)
 	}
 
-	// Apply default pool settings
-	defaults := DefaultPoolConfig()
-	config.MaxConns = defaults.MaxConns
-	config.MinConns = defaults.MinConns
-	config.MaxConnLifetime = defaults.MaxConnLifetime
-	config.MaxConnIdleTime = defaults.MaxConnIdleTime
-	config.HealthCheckPeriod = defaults.HealthCheckPeriod
-
-	// Set application name
-	appName := AppNamePrefix
-	if appNameSuffix != "" {
-		appName = fmt.Sprintf("%s - %s", AppNamePrefix, appNameSuffix)
-	}
-	if config.ConnConfig.RuntimeParams == nil {
-		config.ConnConfig.RuntimeParams = make(map[string]string)
-	}
-	config.ConnConfig.RuntimeParams["application_name"] = appName
-
-	logging.Debug().
-		Str("host", config.ConnConfig.Host).
-		Uint16("port", config.ConnConfig.Port).
-		Str("database", config.ConnConfig.Database).
-		Str("application_name", appName).
-		Msg("Connecting to database")
-
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection pool: %w", err)
-	}
-
-	// Verify connection
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	logging.Info().
-		Str("host", config.ConnConfig.Host).
-		Str("database", config.ConnConfig.Database).
-		Msg("Connected to database")
-
-	return pool, nil
-}
-
-// ConnectWithMaxConns establishes a connection pool with a specified max connections.
-func ConnectWithMaxConns(ctx context.Context, connString string, maxConns int32, appNameSuffix string) (*pgxpool.Pool, error) {
-	config, err := pgxpool.ParseConfig(connString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse connection string: %w", err)
-	}
-
-	// Apply default pool settings
+	// Apply default pool settings with caller-specified max connections
 	defaults := DefaultPoolConfig()
 	config.MaxConns = maxConns
 	config.MinConns = min(defaults.MinConns, maxConns)

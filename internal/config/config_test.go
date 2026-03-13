@@ -40,6 +40,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Init.DropExisting != false {
 		t.Error("Expected Init.DropExisting false")
 	}
+	if cfg.Init.Concurrency != 4 {
+		t.Errorf("Expected Init.Concurrency 4, got %d", cfg.Init.Concurrency)
+	}
 
 	// Run defaults
 	if cfg.Run.Connections != 10 {
@@ -134,6 +137,7 @@ func TestConfigValidateInit(t *testing.T) {
 					Size:                "1GB",
 					EmbeddingMode:       "random",
 					EmbeddingDimensions: 384,
+					Concurrency:         4,
 				},
 			},
 			wantError: false,
@@ -147,6 +151,7 @@ func TestConfigValidateInit(t *testing.T) {
 					Size:                "",
 					EmbeddingMode:       "random",
 					EmbeddingDimensions: 384,
+					Concurrency:         4,
 				},
 			},
 			wantError: true,
@@ -159,6 +164,7 @@ func TestConfigValidateInit(t *testing.T) {
 					Size:                "1GB",
 					EmbeddingMode:       "random",
 					EmbeddingDimensions: 384,
+					Concurrency:         4,
 				},
 			},
 			wantError: true,
@@ -171,6 +177,21 @@ func TestConfigValidateInit(t *testing.T) {
 					Size:                "1GB",
 					EmbeddingMode:       "random",
 					EmbeddingDimensions: 384,
+					Concurrency:         4,
+				},
+			},
+			wantError: true,
+		},
+		{
+			name: "zero concurrency",
+			cfg: &Config{
+				Connection: "postgres://user:pass@localhost/db",
+				App:        "wholesale",
+				Init: InitConfig{
+					Size:                "1GB",
+					EmbeddingMode:       "random",
+					EmbeddingDimensions: 384,
+					Concurrency:         0,
 				},
 			},
 			wantError: true,
@@ -342,6 +363,7 @@ init:
   embedding_mode: "random"
   embedding_dimensions: 512
   drop_existing: true
+  concurrency: 8
 
 run:
   connections: 50
@@ -383,6 +405,9 @@ run:
 	}
 	if cfg.Init.DropExisting != true {
 		t.Error("Init.DropExisting mismatch")
+	}
+	if cfg.Init.Concurrency != 8 {
+		t.Errorf("Init.Concurrency mismatch: %d", cfg.Init.Concurrency)
 	}
 	if cfg.Run.Connections != 50 {
 		t.Errorf("Run.Connections mismatch: %d", cfg.Run.Connections)

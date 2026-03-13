@@ -58,6 +58,9 @@ type InitConfig struct {
 
 	// DropExisting drops existing schema before initialization.
 	DropExisting bool `mapstructure:"drop_existing"`
+
+	// Concurrency is the number of concurrent connections for init.
+	Concurrency int `mapstructure:"concurrency"`
 }
 
 // RunConfig holds configuration for load generation.
@@ -104,6 +107,7 @@ func DefaultConfig() *Config {
 			EmbeddingMode:       "random",
 			EmbeddingDimensions: 384,
 			DropExisting:        false,
+			Concurrency:         4,
 		},
 		Run: RunConfig{
 			Connections:        10,
@@ -180,6 +184,9 @@ func (c *Config) ValidateInit() error {
 	}
 	if c.Init.Size == "" {
 		return fmt.Errorf("target size is required for init")
+	}
+	if c.Init.Concurrency < 1 {
+		return fmt.Errorf("concurrency must be at least 1")
 	}
 	return nil
 }

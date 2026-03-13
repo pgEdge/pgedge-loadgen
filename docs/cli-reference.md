@@ -104,6 +104,7 @@ pgedge-loadgen init [options]
 | `--vectorizer-url` | URL for vectorizer service | - |
 | `--openai-api-key` | OpenAI API key | - |
 | `--drop-existing` | Drop existing schema first | `false` |
+| `--concurrency` | Number of concurrent connections | `4` |
 
 **Embedding Modes:**
 
