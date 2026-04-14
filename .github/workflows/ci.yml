@@ -7,7 +7,7 @@ on:
         branches: [main, master]
 
 env:
-    GO_VERSION: "1.23"
+    GO_VERSION: "1.25.9"
 
 jobs:
     lint:
@@ -15,10 +15,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
             - name: Set up Go
-              uses: actions/setup-go@v5
+              uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
               with:
                   go-version: ${{ env.GO_VERSION }}
 
@@ -44,10 +44,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
             - name: Set up Go
-              uses: actions/setup-go@v5
+              uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
               with:
                   go-version: ${{ env.GO_VERSION }}
 
@@ -58,7 +58,7 @@ jobs:
               run: go test -v -race -coverprofile=coverage.out ./...
 
             - name: Upload coverage
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
               with:
                   name: coverage
                   path: coverage.out
@@ -83,10 +83,10 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
             - name: Set up Go
-              uses: actions/setup-go@v5
+              uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
               with:
                   go-version: ${{ env.GO_VERSION }}
 
@@ -120,10 +120,10 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v4
+              uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
             - name: Set up Go
-              uses: actions/setup-go@v5
+              uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
               with:
                   go-version: ${{ env.GO_VERSION }}
 
@@ -140,7 +140,7 @@ jobs:
                   go build -ldflags "-s -w" -o bin/pgedge-loadgen-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} ./cmd/pgedge-loadgen
 
             - name: Upload binary
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
               with:
                   name: pgedge-loadgen-${{ matrix.goos }}-${{ matrix.goarch }}
                   path: bin/pgedge-loadgen-*
