@@ -1,6 +1,6 @@
 module github.com/pgEdge/pgedge-loadgen
 
-go 1.25.9
+go 1.26.10
 
 require (
 	github.com/brianvoe/gofakeit/v7 v7.12.1
