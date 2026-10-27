@@ -4,7 +4,7 @@
 
 - **PostgreSQL** 14 or later
 - **pgvector extension** (optional, for semantic search applications)
-- **Go 1.22+** (only if building from source)
+- **Go 1.26.10+** (only if building from source)
 
 ## Pre-built Binaries
 
@@ -44,7 +44,7 @@ it directly from the download location.
 
 ### Prerequisites
 
-- Go 1.22 or later
+- Go 1.26.10 or later
 - Git
 - Make (optional, but recommended)
 
