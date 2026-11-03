@@ -7,6 +7,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Updated `github.com/jackc/pgx/v5`, `golang.org/x/text` and
+  `golang.org/x/sys` to versions without known vulnerabilities; the
+  newer pgx no longer depends on `golang.org/x/crypto`
+- Random strings are now drawn from the seeded Faker source rather than
+  the global `math/rand` generator
+
 ## [1.0.0-beta1] - 2026-01-05
 
 ### Added
