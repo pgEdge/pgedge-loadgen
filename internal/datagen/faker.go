@@ -12,7 +12,6 @@ package datagen
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -236,7 +235,7 @@ func (f *Faker) Digits(n int) string {
 func (f *Faker) RandomString(length int, charset string) string {
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
-		result[i] = charset[rand.Intn(len(charset))]
+		result[i] = charset[f.faker.IntN(len(charset))]
 	}
 	return string(result)
 }
