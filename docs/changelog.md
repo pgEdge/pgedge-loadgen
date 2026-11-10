@@ -9,8 +9,34 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-10
+
+### Added
+
+- New `--concurrency` flag for the `init` command, and matching
+  `init.concurrency` configuration setting (default 4), controlling how
+  many database connections are used whilst loading data.
+
+### Changed
+
+- Building from source now requires Go 1.26.10 or later.
+- Updated third-party Go modules to their latest releases.
+
+### Fixed
+
+- The `init` command no longer opens a pool of up to 100 database
+  connections regardless of its concurrency setting
+  ([#2](https://github.com/pgEdge/pgedge-loadgen/issues/2)).
+- An extensionless file named `pgedge-loadgen` in the configuration
+  search path, such as the binary itself, is no longer mistaken for a
+  YAML configuration file, and configuration errors now name the file
+  that could not be read
+  ([#1](https://github.com/pgEdge/pgedge-loadgen/issues/1)).
+
 ### Security
 
+- Release binaries are built with Go 1.26.10, which no longer trusts the
+  compromised eMudhra intermediate CAs (CVE-2026-111943).
 - Updated `github.com/jackc/pgx/v5`, `golang.org/x/text` and
   `golang.org/x/sys` to versions without known vulnerabilities; the
   newer pgx no longer depends on `golang.org/x/crypto`
